@@ -1,0 +1,12 @@
+{
+  "name": "battle-rps-online",
+  "version": "1.0.0",
+  "description": "배틀 가위바위보 - 15장 카드 & 연승/필살기 게이지 싱글 및 온라인 멀티플레이 게임",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
