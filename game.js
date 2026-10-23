@@ -118,9 +118,22 @@ function clearAllTimers() {
 }
 
 // ==========================================
-// 오디오 & 음성 합성
+// 오디오 & 음성 합성 (모바일 완벽 호환 Web Audio API 음성 재생)
 // ==========================================
 let audioCtx = null;
+const voiceBuffers = {};
+let isDecodingVoices = false;
+let currentVoiceSource = null;
+
+function base64ToArrayBuffer(base64) {
+  const binary = window.atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
 function getAudioContext() {
   if (!audioCtx) {
@@ -130,12 +143,79 @@ function getAudioContext() {
     }
   }
   if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
+  }
+  if (audioCtx && !isDecodingVoices && window.VOICE_WAV_BASE64) {
+    isDecodingVoices = true;
+    const keys = Object.keys(window.VOICE_WAV_BASE64);
+    keys.forEach((key) => {
+      try {
+        const ab = base64ToArrayBuffer(window.VOICE_WAV_BASE64[key]);
+        audioCtx.decodeAudioData(
+          ab,
+          (decoded) => {
+            voiceBuffers[key] = decoded;
+          },
+          () => {}
+        );
+      } catch (e) {}
+    });
   }
   return audioCtx;
 }
 
-function playTone(freq, durationMs, type = 'sine', volume = 0.16) {
+function playVoiceClip(clipKey) {
+  if (!state.soundEnabled) return false;
+  const ctx = getAudioContext();
+  if (!ctx) return false;
+
+  const buffer = voiceBuffers[clipKey];
+  if (buffer) {
+    try {
+      if (currentVoiceSource) {
+        try {
+          currentVoiceSource.stop();
+        } catch (e) {}
+      }
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(1.4, ctx.currentTime);
+      source.connect(gain);
+      gain.connect(ctx.destination);
+      source.start(0);
+      currentVoiceSource = source;
+      return true;
+    } catch (e) {}
+  }
+
+  // 아직 디코딩 전이라면 즉시 디코딩 후 재생
+  if (window.VOICE_WAV_BASE64 && window.VOICE_WAV_BASE64[clipKey]) {
+    try {
+      const ab = base64ToArrayBuffer(window.VOICE_WAV_BASE64[clipKey]);
+      ctx.decodeAudioData(
+        ab,
+        (decoded) => {
+          voiceBuffers[clipKey] = decoded;
+          if (!state.soundEnabled) return;
+          const source = ctx.createBufferSource();
+          source.buffer = decoded;
+          const gain = ctx.createGain();
+          gain.gain.setValueAtTime(1.4, ctx.currentTime);
+          source.connect(gain);
+          gain.connect(ctx.destination);
+          source.start(0);
+          currentVoiceSource = source;
+        },
+        () => {}
+      );
+      return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
+function playTone(freq, durationMs, type = 'sine', volume = 0.14) {
   if (!state.soundEnabled) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -158,53 +238,73 @@ function playSoundEffect(effectType) {
   if (!state.soundEnabled) return;
   switch (effectType) {
     case 'chant1':
-      playTone(440, 150, 'triangle', 0.2);
+      playTone(440, 120, 'triangle', 0.12);
       break;
     case 'chant2':
-      playTone(554.37, 150, 'triangle', 0.22);
+      playTone(554.37, 120, 'triangle', 0.12);
       break;
     case 'chant3':
-      playTone(659.25, 230, 'triangle', 0.26);
+      playTone(659.25, 180, 'triangle', 0.14);
       break;
     case 'select':
-      playTone(740, 90, 'sine', 0.18);
+      playTone(740, 90, 'sine', 0.16);
       break;
     case 'win':
-      playTone(523.25, 120, 'sine', 0.2);
-      setTimeout(() => playTone(659.25, 120, 'sine', 0.2), 100);
-      setTimeout(() => playTone(783.99, 260, 'sine', 0.24), 200);
+      playTone(523.25, 110, 'sine', 0.14);
+      setTimeout(() => playTone(659.25, 110, 'sine', 0.14), 90);
+      setTimeout(() => playTone(783.99, 220, 'sine', 0.16), 180);
       break;
     case 'special-hit':
-      playTone(220, 150, 'sawtooth', 0.25);
-      setTimeout(() => playTone(880, 350, 'sawtooth', 0.28), 120);
+      playTone(220, 140, 'sawtooth', 0.18);
+      setTimeout(() => playTone(880, 300, 'sawtooth', 0.2), 110);
       break;
     case 'lose':
     case 'timeout':
-      playTone(349.23, 160, 'sawtooth', 0.2);
-      setTimeout(() => playTone(233.08, 300, 'sawtooth', 0.22), 150);
+      playTone(349.23, 140, 'sawtooth', 0.14);
+      setTimeout(() => playTone(233.08, 240, 'sawtooth', 0.16), 130);
       break;
     case 'draw':
-      playTone(440, 120, 'sine', 0.15);
-      setTimeout(() => playTone(440, 160, 'sine', 0.15), 140);
+      playTone(440, 120, 'sine', 0.14);
+      setTimeout(() => playTone(440, 160, 'sine', 0.14), 140);
       break;
     case 'special-full':
-      playTone(587.33, 100, 'square', 0.15);
-      setTimeout(() => playTone(880, 240, 'square', 0.18), 100);
+      playTone(587.33, 100, 'square', 0.14);
+      setTimeout(() => playTone(880, 220, 'square', 0.16), 100);
       break;
   }
 }
 
 function speakKorean(text, rate = 1.15, pitch = 1.05) {
-  if (!state.soundEnabled || !('speechSynthesis' in window)) return;
-  try {
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = 'ko-KR';
-    utter.rate = rate;
-    utter.pitch = pitch;
-    utter.volume = 0.95;
-    window.speechSynthesis.speak(utter);
-  } catch (e) {}
+  if (!state.soundEnabled) return;
+
+  // 1순위: 스마트폰/PC 어디서든 100% 재생되는 내장 Web Audio 음성 버퍼 사용
+  const clipMap = {
+    '가위!': 'gawi',
+    '바위!': 'bawi',
+    '보!': 'bo',
+    '가위, 바위, 보': 'chant',
+    '이겼다!': 'win',
+    '울지마!': 'lose',
+    '아싸! 이겼다!': 'final_win',
+    '분발해라!': 'final_lose'
+  };
+  const clipKey = clipMap[text];
+  if (clipKey && playVoiceClip(clipKey)) {
+    return;
+  }
+
+  // 2순위 폴백: 브라우저 speechSynthesis
+  if ('speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ko-KR';
+      utter.rate = rate;
+      utter.pitch = pitch;
+      utter.volume = 0.95;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {}
+  }
 }
 
 // ==========================================
@@ -887,10 +987,10 @@ function runChantVisualsAndAudio(totalMs) {
     chantEl.classList.add('shouting');
     chantEl.textContent = word;
     playSoundEffect(soundKey);
+    speakKorean(word);
   };
 
   const stepMs = Math.floor(totalMs / 3);
-  speakKorean('가위, 바위, 보');
   setChantStep('가위!', 'chant1');
 
   registerTimeout(() => {
@@ -1317,6 +1417,14 @@ document.addEventListener('DOMContentLoaded', () => {
   initHandIllustrations();
   loadAllStats();
   showScreen('menu');
+
+  // 스마트폰 터치 시 오디오 컨텍스트 및 한국어 음성 버퍼 즉시 활성화
+  const unlockAudio = () => {
+    getAudioContext();
+  };
+  document.addEventListener('touchstart', unlockAudio, { passive: true });
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+  document.addEventListener('click', unlockAudio, { passive: true });
 
   document.getElementById('btn-mode-single').addEventListener('click', () => {
     enterSinglePlayMode();
