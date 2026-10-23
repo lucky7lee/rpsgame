@@ -29,8 +29,10 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon'
 };
 
 // HTTP 정적 파일 서버
@@ -290,6 +292,7 @@ function sendRoomStateToPlayers(room) {
               life: oppState.life,
               special: oppState.special,
               streak: oppState.streak,
+              cards: oppState.cards,
               totalCards:
                 oppState.cards.scissors + oppState.cards.paper + oppState.cards.rock
             }
@@ -476,41 +479,45 @@ function resolveMultiplayerRound(room) {
   let p2Reason = '';
   let isTimeoutRound = false;
 
-  // 경우 1: 둘 다 시간 내에 선택하지 못함 -> 각자 내 생명 게이지만 1칸씩 감소
+  // 경우 1: 둘 다 시간 내에 선택하지 못함 -> 각자 내 생명 게이지 1칸 감소 + 필살기 게이지 1칸 증가
   if (!c1 && !c2) {
     isTimeoutRound = true;
     s1.life = Math.max(0, s1.life - 1);
     s2.life = Math.max(0, s2.life - 1);
+    s1.special = Math.min(MAX_SPECIAL, s1.special + 1);
+    s2.special = Math.min(MAX_SPECIAL, s2.special + 1);
     s1.streak = 0;
     s2.streak = 0;
     p1Outcome = 'timeout_both';
     p2Outcome = 'timeout_both';
     p1DamageTaken = 1;
     p2DamageTaken = 1;
-    p1Reason = '양쪽 모두 시간 초과! (각자 생명 -1)';
-    p2Reason = '양쪽 모두 시간 초과! (각자 생명 -1)';
+    p1Reason = 'BOTH TIME OUT (LIFE -1, SP +1)';
+    p2Reason = 'BOTH TIME OUT (LIFE -1, SP +1)';
   }
-  // 경우 2: p1만 시간 초과 -> p1의 생명 게이지만 1칸 감소
+  // 경우 2: p1만 시간 초과 -> p1의 생명 게이지 1칸 감소 + p1의 필살기 게이지 1칸 증가
   else if (!c1 && c2) {
     isTimeoutRound = true;
     s1.life = Math.max(0, s1.life - 1);
+    s1.special = Math.min(MAX_SPECIAL, s1.special + 1);
     s1.streak = 0;
     p1Outcome = 'timeout_me';
     p2Outcome = 'timeout_opp';
     p1DamageTaken = 1;
-    p1Reason = '시간 초과 (미선택)! 내 생명 -1';
-    p2Reason = '상대방 시간 초과 (미선택)! 상대 생명 -1';
+    p1Reason = 'TIME OUT! (MY LIFE -1, SP +1)';
+    p2Reason = 'OPP TIME OUT! (OPP LIFE -1)';
   }
-  // 경우 3: p2만 시간 초과 -> p2의 생명 게이지만 1칸 감소
+  // 경우 3: p2만 시간 초과 -> p2의 생명 게이지 1칸 감소 + p2의 필살기 게이지 1칸 증가
   else if (c1 && !c2) {
     isTimeoutRound = true;
     s2.life = Math.max(0, s2.life - 1);
+    s2.special = Math.min(MAX_SPECIAL, s2.special + 1);
     s2.streak = 0;
     p1Outcome = 'timeout_opp';
     p2Outcome = 'timeout_me';
     p2DamageTaken = 1;
-    p1Reason = '상대방 시간 초과 (미선택)! 상대 생명 -1';
-    p2Reason = '시간 초과 (미선택)! 내 생명 -1';
+    p1Reason = 'OPP TIME OUT! (OPP LIFE -1)';
+    p2Reason = 'TIME OUT! (MY LIFE -1, SP +1)';
   }
   // 경우 4: 양쪽 모두 시간 내에 카드를 선택한 경우 -> 카드 1장씩 소모 및 정상 판정
   else {
@@ -603,6 +610,7 @@ function resolveMultiplayerRound(room) {
       life: oppState.life,
       special: oppState.special,
       streak: oppState.streak,
+      cards: oppState.cards,
       totalCards: oppState.cards.scissors + oppState.cards.paper + oppState.cards.rock
     }
   });

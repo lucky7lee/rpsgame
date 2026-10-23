@@ -2,265 +2,275 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>배틀 가위바위보 - 싱글 &amp; 온라인 멀티플레이</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="배틀가위바위보" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="Shortcut Icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <title>BATTLE RPS - Single &amp; Multi</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="game-container">
 
     <!-- ==========================================
-         1. 초기 시작 화면 (싱글플레이 / 멀티플레이 선택)
+         1. 초기 시작 화면 (SINGLE / MULTI 선택 + 하단 게임 설명)
          ========================================== -->
     <section id="screen-menu" class="screen-view">
       <div class="menu-hero">
-        <div class="hero-badge">NEW CONCEPT ROCK-PAPER-SCISSORS</div>
-        <h1 class="hero-title">⚡ 배틀 가위바위보</h1>
-        <p class="hero-subtitle">9장의 카드(가위 3 · 바위 3 · 보 3)와 연승 · 필살기 게이지(3칸)로 승부하는 전략 심리전!</p>
+        <div class="menu-top-bar">
+          <div class="hero-badge">BATTLE ROCK · PAPER · SCISSORS</div>
+          <button id="btn-open-install" class="btn-install-chip" type="button">📲 INSTALL</button>
+        </div>
+
+        <div class="hero-brand-row">
+          <img src="/icon-192.png" alt="배틀 가위바위보 아이콘" class="hero-app-icon" />
+          <h1 class="hero-title">BATTLE RPS</h1>
+        </div>
 
         <div class="nickname-box">
-          <label for="input-nickname">내 닉네임 :</label>
-          <input id="input-nickname" type="text" maxlength="16" placeholder="닉네임 입력 (예: 가위바위보왕)" value="플레이어" />
+          <label for="input-nickname">NAME</label>
+          <input id="input-nickname" type="text" maxlength="12" placeholder="Nickname" value="PLAYER" />
         </div>
 
         <div class="mode-cards-grid">
-          <!-- 싱글플레이 선택 카드 -->
+          <!-- 싱글플레이 선택 -->
           <div class="mode-card single-card" id="btn-mode-single" role="button" tabindex="0">
             <div class="mode-icon">🤖</div>
-            <h2 class="mode-title">싱글플레이</h2>
-            <p class="mode-desc">컴퓨터(AI)와 1:1 대결을 펼칩니다.<br/>언제든 바로 시작할 수 있습니다.</p>
-            <div class="mode-record-pill" id="menu-single-record">
-              싱글 전적 : 0승 0패 (승률 0%)
-            </div>
-            <span class="mode-action-btn">싱글플레이 시작 ▶</span>
+            <h2 class="mode-title">SINGLE PLAY</h2>
+            <div class="mode-record-pill" id="menu-single-record">W:0 L:0 D:0 (0%)</div>
+            <span class="mode-action-btn">PLAY VS AI ▶</span>
           </div>
 
-          <!-- 멀티플레이 선택 카드 -->
+          <!-- 멀티플레이 선택 -->
           <div class="mode-card multi-card" id="btn-mode-multi" role="button" tabindex="0">
             <div class="mode-icon">🌐</div>
-            <h2 class="mode-title">멀티플레이 (온라인)</h2>
-            <p class="mode-desc">대기실에서 방을 만들거나,<br/>상대방이 만든 방에 입장해 실시간 대결합니다.</p>
-            <div class="mode-record-pill multi-pill" id="menu-multi-record">
-              멀티 전적 : 0승 0패 (승률 0%)
-            </div>
-            <span class="mode-action-btn multi-btn">멀티 대기실 입장 ▶</span>
+            <h2 class="mode-title">MULTI PLAY</h2>
+            <div class="mode-record-pill multi-pill" id="menu-multi-record">W:0 L:0 D:0 (0%)</div>
+            <span class="mode-action-btn multi-btn">ONLINE LOBBY ▶</span>
           </div>
+        </div>
+
+        <!-- 시작 화면 하단: 별도 게임 설명 영역 -->
+        <div class="menu-rules-box">
+          <h3 class="menu-rules-title">📖 GAME RULES (게임 설명)</h3>
+          <ul class="menu-rules-list">
+            <li>🃏 <strong>카드 (총 9장)</strong> : 가위(3장), 바위(3장), 보(3장) 중 한 판당 1장씩 사용하며 쓴 카드는 사라집니다.</li>
+            <li>⏱️ <strong>선택 시간</strong> : 하단의 <strong>START</strong>를 누르면 <em>"가위, 바위, 보!"</em>가 끝날 때까지 카드를 선택해야 합니다. (미선택 시 내 생명 -1 &amp; 필살기 +1, 다음 판은 5초 후 자동 시작)</li>
+            <li>⭐ <strong>생명 게이지 (5칸)</strong> : 패배 시 -1칸 | <strong>2연승</strong> 시 -2칸 | <strong>3연승 이상</strong> 시 무조건 -3칸</li>
+            <li>🔥 <strong>필살기 게이지 (3칸)</strong> : 지거나 비길 때마다(미선택 포함) +1칸 | <strong>3칸 완충 후 승리 시</strong> 상대 생명 -3칸 &amp; 게이지 0 초기화</li>
+            <li>🏆 <strong>승패 판정</strong> : 생명 게이지가 0이 되면 즉시 종료! 9장을 모두 써도 0이 된 사람이 없으면 남은 생명이 많은 쪽이 승리(같으면 무승부)합니다.</li>
+          </ul>
         </div>
       </div>
     </section>
 
     <!-- ==========================================
-         2. 멀티플레이 대기실 화면 (Lobby)
+         2. 멀티플레이 대기실 화면 (LOBBY)
          ========================================== -->
     <section id="screen-lobby" class="screen-view hidden">
       <header class="lobby-header">
         <div class="lobby-header-left">
-          <button id="btn-lobby-back" class="btn-mini btn-back" type="button">◀ 메인 화면</button>
-          <span class="mode-tag multi-tag">🌐 멀티플레이 대기실</span>
-          <span id="ws-status-badge" class="ws-badge connecting">서버 연결 중...</span>
+          <button id="btn-lobby-back" class="btn-mini btn-back" type="button">◀ MENU</button>
+          <span class="mode-tag multi-tag">🌐 LOBBY</span>
+          <span id="ws-status-badge" class="ws-badge connecting">CONNECTING...</span>
         </div>
         <div class="lobby-record-bar">
-          <span>멀티 전적 — 승 : <strong id="lobby-wins">0</strong>승</span>
-          <span>패 : <strong id="lobby-losses">0</strong>패</span>
-          <span class="draw-item">(무 : <strong id="lobby-draws">0</strong>)</span>
-          <span>승률 : <strong id="lobby-winrate">0</strong>%</span>
+          <span>W:<strong id="lobby-wins">0</strong></span>
+          <span>L:<strong id="lobby-losses">0</strong></span>
+          <span class="draw-item">D:<strong id="lobby-draws">0</strong></span>
+          <span>RATE:<strong id="lobby-winrate">0</strong>%</span>
         </div>
       </header>
 
       <div class="lobby-body">
-        <!-- 방 만들기 컨트롤 -->
         <div class="create-room-bar">
           <input
             id="input-room-title"
             type="text"
-            maxlength="28"
+            maxlength="20"
             class="input-room-title"
-            placeholder="만들 방 제목을 입력하세요 (예: 한판 붙으실 분!)"
+            placeholder="Room Title..."
           />
-          <button id="btn-create-room" class="btn-create-room" type="button">
-            ➕ 방 만들기
-          </button>
-          <button id="btn-refresh-rooms" class="btn-mini" type="button">
-            🔄 새로고침
-          </button>
+          <button id="btn-create-room" class="btn-create-room" type="button">➕ CREATE</button>
+          <button id="btn-refresh-rooms" class="btn-mini" type="button">🔄 REFRESH</button>
         </div>
 
-        <!-- 생성된 방 목록 -->
         <div class="room-list-section">
           <div class="room-list-header">
-            <h3>현재 개설된 방 목록</h3>
-            <span id="room-count-text" class="room-count-text">총 0개 방</span>
+            <h3>ROOM LIST</h3>
+            <span id="room-count-text" class="room-count-text">0 ROOMS</span>
           </div>
           <div id="room-list-container" class="room-list-container">
-            <div class="empty-room-msg">현재 생성된 방이 없습니다. 상단에서 [방 만들기]를 눌러 새 방을 만들어 보세요!</div>
+            <div class="empty-room-msg">NO ROOMS. CLICK [➕ CREATE] TO MAKE A ROOM!</div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ==========================================
-         3. 대결 경기장 화면 (싱글 & 멀티 공용)
+         3. 대결 경기장 화면 (모바일 1화면 최적화)
          ========================================== -->
-    <section id="screen-game" class="screen-view hidden">
-      <!-- 상단 전적 및 내 상태 바 -->
+    <section id="screen-game" class="screen-view game-screen-view hidden">
+      <!-- 상단 바: 메뉴 + 전적 + 내 게이지(파란색 생명) -->
       <header class="top-status-bar">
-        <div class="record-box">
-          <button id="btn-leave-game" class="btn-mini btn-back" type="button">◀ 나가기</button>
-          <span id="game-mode-badge" class="mode-tag">🤖 싱글플레이</span>
-          <span class="record-item">승 : <strong id="stat-wins">0</strong>승</span>
-          <span class="record-item">패 : <strong id="stat-losses">0</strong>패</span>
-          <span class="record-item draw-item" title="무승부 횟수">(무 : <strong id="stat-draws">0</strong>)</span>
-          <span class="record-item">승률 : <strong id="stat-winrate">0</strong>%</span>
-          <button id="btn-reset-stats" class="btn-mini" title="현재 모드 전적 초기화">초기화</button>
-          <button id="btn-sound-toggle" class="btn-mini sound-on" title="소리 켜기/끄기">🔊 소리 켜짐</button>
+        <div class="top-bar-row">
+          <div class="record-box">
+            <button id="btn-leave-game" class="btn-mini btn-back" type="button">◀ EXIT</button>
+            <span id="game-mode-badge" class="mode-tag">SINGLE</span>
+            <span class="record-item">W:<strong id="stat-wins">0</strong></span>
+            <span class="record-item">L:<strong id="stat-losses">0</strong></span>
+            <span class="record-item draw-item">D:<strong id="stat-draws">0</strong></span>
+            <span class="record-item"><strong id="stat-winrate">0</strong>%</span>
+          </div>
+          <div class="top-actions">
+            <button id="btn-reset-stats" class="btn-mini" title="Reset Record">RESET</button>
+            <button id="btn-sound-toggle" class="btn-mini sound-on" title="Sound On/Off">🔊 ON</button>
+          </div>
         </div>
 
-        <div class="gauges-panel">
-          <div class="gauge-row">
-            <span class="gauge-label">생명 게이지 :</span>
-            <div id="player-life-stars" class="life-stars" aria-label="내 생명 게이지 5칸"></div>
-            <span id="player-streak-badge" class="streak-badge hidden">0연승</span>
+        <!-- 내 생명 게이지(파란색) & 내 필살기 게이지(3칸) -->
+        <div class="my-gauges-strip">
+          <div class="gauge-item">
+            <span class="gauge-label my-label">MY LIFE</span>
+            <div id="player-life-stars" class="life-stars player-stars"></div>
+            <span id="player-streak-badge" class="streak-badge hidden">2 WIN</span>
           </div>
-          <div class="gauge-row">
-            <span class="gauge-label special-label">필살기 게이지 :</span>
-            <div id="player-special-bar" class="special-bar" aria-label="내 필살기 게이지 3칸">
+          <div class="gauge-item">
+            <span class="gauge-label my-label">SP</span>
+            <div id="player-special-bar" class="special-bar">
               <div class="special-slot"></div>
               <div class="special-slot"></div>
               <div class="special-slot"></div>
             </div>
-            <span id="player-special-ready" class="special-ready-badge hidden">⚡ 필살기 발동 준비! (승리 시 -3)</span>
+            <span id="player-special-ready" class="special-ready-badge hidden">⚡MAX</span>
           </div>
         </div>
       </header>
 
-      <!-- 메인 대결 경기장 -->
+      <!-- 메인 아레나 -->
       <main class="arena">
         <!-- 상단: 상대편 영역 -->
-        <section class="opponent-Zone">
-          <!-- 구호 텍스트 및 라운드 안내 영역 -->
-          <div class="chant-banner">
-            <div id="round-indicator" class="round-badge">ROUND 1</div>
-            <div class="chant-center-wrap">
-              <div id="chant-text" class="chant-text">
-                <strong>[시작]</strong> 버튼을 누르면 "가위, 바위, 보!"가 시작됩니다!
-              </div>
-              <!-- 선택 제한시간 게이지 바 -->
-              <div id="timer-bar-wrap" class="timer-bar-wrap hidden">
-                <div id="timer-bar-fill" class="timer-bar-fill"></div>
-              </div>
-            </div>
-            <div class="opponent-remaining-cards">
-              상대 남은 카드 : <strong id="opp-total-cards">9</strong>장
-            </div>
-          </div>
-
-          <!-- 시작 버튼 컨트롤 바 -->
-          <div class="start-control-row" id="start-control-row">
-            <button id="btn-start-game" class="btn-start-game" type="button">
-              ▶ 시작 (대결 스타트!)
-            </button>
-            <span id="status-subtext" class="status-subtext">
-              시작을 누르면 "가위 바위 보"가 끝날 때까지 카드를 선택해야 합니다! (미선택 시 내 생명 -1)
-            </span>
-          </div>
-
-          <!-- 상대편 상태 (생명 게이지 & 필살기 게이지) -->
+        <section class="opponent-zone">
+          <!-- 상대 상태 바 (검은색 생명 게이지 + 옆에 상대 남은 가위/보/바위 작은 이미지와 숫자) -->
           <div class="opponent-status-strip">
             <div class="opp-gauge-group">
-              <span class="opp-label" id="opp-name-label">🤖 상대 생명 :</span>
+              <span class="round-badge" id="round-indicator">R1</span>
+              <span class="opp-label" id="opp-name-label">OPP LIFE</span>
               <div id="opp-life-stars" class="life-stars opp-stars"></div>
-              <span id="opp-streak-badge" class="streak-badge opp-streak hidden">0연승</span>
+              <span id="opp-streak-badge" class="streak-badge opp-streak hidden">2 WIN</span>
+              <!-- 상대편 남은 가위/보/바위 작은 이미지 + 숫자 -->
+              <div class="opp-mini-counts" aria-label="Opponent Remaining Cards">
+                <span class="opp-card-chip" id="opp-chip-scissors" title="가위">
+                  <span class="opp-mini-svg" id="opp-svg-scissors"></span>
+                  <strong id="opp-count-scissors">3</strong>
+                </span>
+                <span class="opp-card-chip" id="opp-chip-paper" title="보">
+                  <span class="opp-mini-svg" id="opp-svg-paper"></span>
+                  <strong id="opp-count-paper">3</strong>
+                </span>
+                <span class="opp-card-chip" id="opp-chip-rock" title="바위">
+                  <span class="opp-mini-svg" id="opp-svg-rock"></span>
+                  <strong id="opp-count-rock">3</strong>
+                </span>
+              </div>
             </div>
             <div class="opp-gauge-group">
-              <span class="opp-label">상대 필살기 :</span>
+              <span class="opp-label">SP</span>
               <div id="opp-special-bar" class="special-bar opp-special">
                 <div class="special-slot"></div>
-                <div class="opp-special-slot special-slot"></div>
+                <div class="special-slot"></div>
                 <div class="special-slot"></div>
               </div>
-              <span id="opp-special-ready" class="special-ready-badge opp-ready hidden">⚠️ 상대 필살기!</span>
+              <span id="opp-special-ready" class="special-ready-badge opp-ready hidden">⚠️MAX</span>
+              <span class="opp-cards-pill hidden">🃏<strong id="opp-total-cards">9</strong></span>
             </div>
           </div>
 
-          <!-- 상대편 가위, 바위, 보 화면 (파란 액자 + 중앙 흰색 디스플레이) -->
+          <!-- 구호(가위 바위 보) & 타이머 바 -->
+          <div class="chant-bar">
+            <div id="chant-text" class="chant-text">PRESS <strong>[START]</strong> BELOW!</div>
+            <div id="timer-bar-wrap" class="timer-bar-wrap hidden">
+              <div id="timer-bar-fill" class="timer-bar-fill"></div>
+            </div>
+          </div>
+
+          <!-- 상대편 가위, 바위, 보 화면 -->
           <div class="opponent-frame">
             <div id="opponent-screen" class="opponent-screen">
               <div id="opp-hand-Visual" class="opp-hand-visual">
                 <span class="question-mark">❓</span>
               </div>
-              <div id="opp-hand-name" class="opp-hand-name">상대편 대기 중</div>
-              <p class="opp-screen-desc" id="opp-screen-desc">
-                가위, 바위, 보가 빠르게 바뀌다가 상대편 선택이 최종적으로 보입니다.
-              </p>
+              <div id="opp-hand-name" class="opp-hand-name">READY</div>
             </div>
 
-            <!-- 대결 결과 배지 오버레이 -->
+            <!-- 결과 배지 오버레이 -->
             <div id="round-result-overlay" class="round-result-overlay hidden">
-              <div id="round-result-title" class="result-title">승리!</div>
-              <div id="round-result-detail" class="result-detail">상대 생명 게이지 -1</div>
+              <div id="round-result-title" class="result-title">WIN!</div>
+              <div id="round-result-detail" class="result-detail">OPP LIFE -1</div>
             </div>
           </div>
         </section>
 
-        <!-- 하단: 나의 화면 (가위 3장, 바위 3장, 보 3장) -->
+        <!-- 하단: 나의 가위/보/바위 선택 영역 + 맨 아래 START 버튼 -->
         <section class="player-zone">
           <div class="player-zone-header">
-            <h2 class="zone-title">
-              나의 화면 (<span id="my-name-display">플레이어</span>) :
-              <span class="zone-subtitle">"가위 바위 보" 소리가 끝나기 전에 아래 카드 중 하나를 선택하세요!</span>
-            </h2>
-            <div class="player-remaining-total">
-              내 남은 카드 : <strong id="player-total-cards">9</strong>장
-            </div>
+            <span class="zone-title">MY CARDS (<span id="my-name-display">PLAYER</span>)</span>
+            <span class="player-remaining-total">LEFT : <strong id="player-total-cards">9</strong></span>
           </div>
 
-          <!-- 가위 / 보 / 바위 3종류 선택 그룹 -->
           <div class="card-groups-container">
-            <!-- 가위 그룹 -->
+            <!-- 가위 -->
             <div class="card-group" id="group-scissors" data-choice="scissors">
-              <button class="main-hand-card" id="btn-scissors" type="button" aria-label="가위 선택" disabled>
+              <button class="main-hand-card" id="btn-scissors" type="button" aria-label="SCISSORS" disabled>
                 <div class="hand-illustration scissors-art" id="svg-scissors"></div>
                 <div class="hand-label-row">
                   <span class="hand-title">가위</span>
-                  <span class="hand-count-badge"><span id="count-scissors">3</span> / 3장</span>
+                  <span class="hand-count-badge"><span id="count-scissors">3</span>/3</span>
                 </div>
               </button>
               <div class="mini-cards-deck" id="deck-scissors"></div>
             </div>
 
-            <!-- 보 그룹 -->
+            <!-- 보 -->
             <div class="card-group" id="group-paper" data-choice="paper">
-              <button class="main-hand-card" id="btn-paper" type="button" aria-label="보 선택" disabled>
+              <button class="main-hand-card" id="btn-paper" type="button" aria-label="PAPER" disabled>
                 <div class="hand-illustration paper-art" id="svg-paper"></div>
                 <div class="hand-label-row">
                   <span class="hand-title">보</span>
-                  <span class="hand-count-badge"><span id="count-paper">3</span> / 3장</span>
+                  <span class="hand-count-badge"><span id="count-paper">3</span>/3</span>
                 </div>
               </button>
               <div class="mini-cards-deck" id="deck-paper"></div>
             </div>
 
-            <!-- 바위 그룹 -->
+            <!-- 바위 -->
             <div class="card-group" id="group-rock" data-choice="rock">
-              <button class="main-hand-card" id="btn-rock" type="button" aria-label="바위 선택" disabled>
+              <button class="main-hand-card" id="btn-rock" type="button" aria-label="ROCK" disabled>
                 <div class="hand-illustration rock-art" id="svg-rock"></div>
                 <div class="hand-label-row">
                   <span class="hand-title">바위</span>
-                  <span class="hand-count-badge"><span id="count-rock">3</span> / 3장</span>
+                  <span class="hand-count-badge"><span id="count-rock">3</span>/3</span>
                 </div>
               </button>
               <div class="mini-cards-deck" id="deck-rock"></div>
             </div>
           </div>
+
+          <!-- 나의 카드 선택 화면 아래에 배치된 START 버튼 -->
+          <div class="bottom-start-bar">
+            <button id="btn-start-game" class="btn-start-game" type="button">
+              ▶ START
+            </button>
+            <div id="status-subtext" class="status-subtext">PRESS START TO PLAY</div>
+          </div>
         </section>
       </main>
-
-      <!-- 하단 규칙 요약 바 -->
-      <footer class="rules-footer">
-        <div class="rule-pill">⏱️ <strong>선택 규칙</strong> : [시작] 후 "가위 바위 보"가 끝나기 전에 미선택 시 내 생명 -1칸 (다음 라운드까지 5초 간격 자동 진행)</div>
-        <div class="rule-pill">⭐ <strong>생명/연승</strong> : 패배 시 -1칸 | <strong>2연승</strong> -2칸 | <strong>3연승 이상</strong> 무조건 -3칸</div>
-        <div class="rule-pill">🔥 <strong>필살기(3칸)</strong> : 지거나 비길 때 +1칸 | <strong>3칸 완충 후 승리 시</strong> 상대 생명 -3칸 &amp; 0 초기화</div>
-      </footer>
     </section>
 
   </div>
@@ -269,25 +279,25 @@
   <div id="gameover-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div id="modal-badge" class="modal-badge">GAME OVER</div>
-      <h2 id="modal-title" class="modal-title">승리했습니다!</h2>
-      <p id="modal-reason" class="modal-reason">상대편의 생명 게이지가 0이 되었습니다.</p>
+      <h2 id="modal-title" class="modal-title">YOU WIN!</h2>
+      <p id="modal-reason" class="modal-reason">OPP LIFE REACHED 0</p>
 
       <div class="modal-comparison">
         <div class="modal-side player-side">
-          <div class="side-title" id="modal-my-name">나 (플레이어)</div>
-          <div id="modal-player-stars" class="modal-stars">★★★★★</div>
-          <div id="modal-player-life-text" class="side-sub">남은 생명: 5칸</div>
+          <div class="side-title" id="modal-my-name">ME</div>
+          <div id="modal-player-stars" class="modal-stars player-modal-stars">★★★★★</div>
+          <div id="modal-player-life-text" class="side-sub">LIFE: 5</div>
         </div>
         <div class="modal-vs">VS</div>
         <div class="modal-side opp-side">
-          <div class="modal-side-title side-title" id="modal-opp-name">상대편</div>
-          <div id="modal-opp-stars" class="modal-stars">☆☆☆☆☆</div>
-          <div id="modal-opp-life-text" class="side-sub">남은 생명: 0칸</div>
+          <div class="side-title" id="modal-opp-name">OPP</div>
+          <div id="modal-opp-stars" class="modal-stars opp-modal-stars">☆☆☆☆☆</div>
+          <div id="modal-opp-life-text" class="side-sub">LIFE: 0</div>
         </div>
       </div>
 
       <div class="modal-stats-summary">
-        <span id="modal-mode-label">현재 모드</span> 전적 : <strong id="modal-record-text">1승 0패 (승률 100%)</strong>
+        <span id="modal-mode-label">SINGLE</span> : <strong id="modal-record-text">W:1 L:0 D:0 (100%)</strong>
       </div>
 
       <div class="modal-btn-row">
@@ -296,6 +306,32 @@
         </button>
         <button id="btn-modal-leave" class="btn-secondary-large" type="button">
           🚪 대기실로
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 처음 접속 시 바탕화면 바로가기 아이콘 설치 안내 모달 -->
+  <div id="install-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card install-modal-card">
+      <div class="install-icon-wrap">
+        <img src="/icon-192.png" alt="배틀 가위바위보 아이콘" class="install-preview-icon" />
+      </div>
+      <div class="modal-badge win">APP SHORTCUT</div>
+      <h2 class="modal-title install-title">바탕화면에 바로가기 설치</h2>
+      <p id="install-desc" class="modal-reason">
+        윈도우 PC 또는 스마트폰 바탕화면에<br/>
+        <strong>귀여운 가위바위보 바로가기 아이콘</strong>을 만들까요?
+      </p>
+
+      <div id="install-guide-box" class="install-guide-box hidden"></div>
+
+      <div class="modal-btn-row">
+        <button id="btn-install-confirm" class="btn-primary-large" type="button">
+          ✨ 바로가기 만들기
+        </button>
+        <button id="btn-install-later" class="btn-secondary-large" type="button">
+          나중에
         </button>
       </div>
     </div>

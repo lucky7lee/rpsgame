@@ -1,5 +1,5 @@
 // ==========================================
-// 배틀 가위바위보 - 싱글플레이 & 온라인 멀티플레이 (game.js)
+// BATTLE RPS - Single & Online Multi (game.js)
 // ==========================================
 
 const HAND_SVGS = {
@@ -64,12 +64,11 @@ const CHANT_STEP_MS = 600;
 const CHANT_TOTAL_MS = CHANT_STEP_MS * 3;
 const NEXT_ROUND_DELAY_MS = 5000;
 
-// 전체 상태
 const state = {
-  screen: 'menu',         // 'menu' | 'lobby' | 'game'
-  mode: 'single',         // 'single' | 'multi'
-  nickname: '플레이어',
-  oppNickname: '컴퓨터(AI)',
+  screen: 'menu',
+  mode: 'single',
+  nickname: 'PLAYER',
+  oppNickname: 'AI',
 
   round: 1,
   isRunning: false,
@@ -92,17 +91,14 @@ const state = {
     totalCards: INITIAL_CARD_COUNT * 3
   },
 
-  // 싱글플레이와 멀티플레이 전적 분리 관리
   stats: {
     single: { wins: 0, losses: 0, draws: 0 },
     multi: { wins: 0, losses: 0, draws: 0 }
   },
 
-  // 멀티플레이 방 정보
   room: null
 };
 
-// 타이머 관리
 let activeTimers = [];
 let cycleIntervalId = null;
 
@@ -208,13 +204,11 @@ function speakKorean(text, rate = 1.15, pitch = 1.05) {
     utter.pitch = pitch;
     utter.volume = 0.95;
     window.speechSynthesis.speak(utter);
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 // ==========================================
-// 싱글플레이 / 멀티플레이 전적 분리 저장 및 렌더링
+// 전적 관리 (SINGLE / MULTI 분리)
 // ==========================================
 function loadAllStats() {
   try {
@@ -226,17 +220,6 @@ function loadAllStats() {
         losses: Number(p.losses) || 0,
         draws: Number(p.draws) || 0
       };
-    } else {
-      // 이전 단일 버전 전적이 있으면 싱글 전적으로 마이그레이션
-      const legacy = localStorage.getItem('rps_battle_stats_v1');
-      if (legacy) {
-        const p = JSON.parse(legacy);
-        state.stats.single = {
-          wins: Number(p.wins) || 0,
-          losses: Number(p.losses) || 0,
-          draws: Number(p.draws) || 0
-        };
-      }
     }
 
     const savedMulti = localStorage.getItem('rps_stats_multi_v2');
@@ -255,9 +238,7 @@ function loadAllStats() {
       const input = document.getElementById('input-nickname');
       if (input) input.value = savedNick;
     }
-  } catch (e) {
-    console.warn('전적 불러오기 오류:', e);
-  }
+  } catch (e) {}
   renderAllStatsUI();
 }
 
@@ -268,9 +249,7 @@ function saveStats(modeKey) {
     } else {
       localStorage.setItem('rps_stats_multi_v2', JSON.stringify(state.stats.multi));
     }
-  } catch (e) {
-    console.warn('전적 저장 오류:', e);
-  }
+  } catch (e) {}
   renderAllStatsUI();
 }
 
@@ -285,19 +264,16 @@ function renderAllStatsUI() {
   const m = state.stats.multi;
   const mRate = calcWinRate(m);
 
-  // 1) 메인 시작 화면 요약
   document.getElementById('menu-single-record').textContent =
-    `싱글 전적 : ${s.wins}승 ${s.losses}패 ${s.draws}무 (승률 ${sRate}%)`;
+    `W:${s.wins} L:${s.losses} D:${s.draws} (${sRate}%)`;
   document.getElementById('menu-multi-record').textContent =
-    `멀티 전적 : ${m.wins}승 ${m.losses}패 ${m.draws}무 (승률 ${mRate}%)`;
+    `W:${m.wins} L:${m.losses} D:${m.draws} (${mRate}%)`;
 
-  // 2) 멀티플레이 대기실 상단 바
   document.getElementById('lobby-wins').textContent = m.wins;
   document.getElementById('lobby-losses').textContent = m.losses;
   document.getElementById('lobby-draws').textContent = m.draws;
   document.getElementById('lobby-winrate').textContent = mRate;
 
-  // 3) 게임 화면 상단 바 (현재 선택된 모드의 전적 표시)
   const activeRecord = state.mode === 'multi' ? m : s;
   const activeRate = state.mode === 'multi' ? mRate : sRate;
   document.getElementById('stat-wins').textContent = activeRecord.wins;
@@ -306,9 +282,6 @@ function renderAllStatsUI() {
   document.getElementById('stat-winrate').textContent = activeRate;
 }
 
-// ==========================================
-// 화면 전환 ('menu' | 'lobby' | 'game')
-// ==========================================
 function showScreen(screenName) {
   state.screen = screenName;
   document.getElementById('screen-menu').classList.toggle('hidden', screenName !== 'menu');
@@ -320,15 +293,15 @@ function showScreen(screenName) {
 
 function syncNicknameFromInput() {
   const input = document.getElementById('input-nickname');
-  const val = (input ? input.value : '').trim() || '플레이어';
-  state.nickname = val.slice(0, 16);
+  const val = (input ? input.value : '').trim() || 'PLAYER';
+  state.nickname = val.slice(0, 12);
   try {
     localStorage.setItem('rps_player_nickname', state.nickname);
   } catch (e) {}
 }
 
 // ==========================================
-// WebSocket 클라이언트 (멀티플레이 대기실 & 방 통신)
+// WebSocket (멀티플레이)
 // ==========================================
 let ws = null;
 
@@ -341,7 +314,7 @@ function ensureWebSocketConnected() {
     return;
   }
 
-  updateWsBadge('connecting', '서버 연결 중...');
+  updateWsBadge('connecting', 'CONNECTING...');
   const wsUrl =
     window.location.protocol === 'file:'
       ? 'ws://localhost:3000'
@@ -350,12 +323,12 @@ function ensureWebSocketConnected() {
   try {
     ws = new WebSocket(wsUrl);
   } catch (e) {
-    updateWsBadge('disconnected', '서버 연결 실패 (node server.js 실행 필요)');
+    updateWsBadge('disconnected', 'OFFLINE');
     return;
   }
 
   ws.onopen = () => {
-    updateWsBadge('connected', '🟢 온라인 연결됨');
+    updateWsBadge('connected', '🟢 ONLINE');
     wsSend({ type: 'set_nickname', nickname: state.nickname });
     wsSend({ type: 'get_rooms' });
   };
@@ -364,17 +337,15 @@ function ensureWebSocketConnected() {
     try {
       const msg = JSON.parse(event.data);
       handleServerMessage(msg);
-    } catch (e) {
-      console.warn('서버 메시지 파싱 오류:', e);
-    }
+    } catch (e) {}
   };
 
   ws.onclose = () => {
-    updateWsBadge('disconnected', '🔴 서버 연결 끊김 (node server.js 확인)');
+    updateWsBadge('disconnected', '🔴 OFFLINE');
   };
 
   ws.onerror = () => {
-    updateWsBadge('disconnected', '🔴 서버 연결 실패 (node server.js 실행 필요)');
+    updateWsBadge('disconnected', '🔴 ERROR');
   };
 }
 
@@ -399,7 +370,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'error':
-      alert(msg.message || '오류가 발생했습니다.');
+      alert(msg.message || 'Error');
       break;
 
     case 'left_room':
@@ -421,10 +392,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'opp_locked': {
-      const oppDesc = document.getElementById('opp-screen-desc');
-      if (oppDesc) {
-        oppDesc.textContent = '⚡ 상대방이 카드를 선택했습니다! "가위 바위 보" 종료 시 공개됩니다.';
-      }
+      document.getElementById('opp-hand-name').textContent = 'OPP READY!';
       break;
     }
 
@@ -439,14 +407,14 @@ function handleServerMessage(msg) {
     case 'rematch_requested': {
       const subtextEl = document.getElementById('status-subtext');
       if (subtextEl) {
-        subtextEl.textContent = `🔄 상대방(${msg.nickname})이 [다시 한번 더]를 눌렀습니다! [시작]을 누르면 재대결이 시작됩니다!`;
+        subtextEl.textContent = `🔄 ${msg.nickname} WANTS REMATCH! PRESS START!`;
       }
       break;
     }
 
     case 'opponent_left_during_match':
       clearAllTimers();
-      alert(msg.message || '상대방이 퇴장했습니다.');
+      alert('상대방이 퇴장했습니다.');
       break;
   }
 }
@@ -454,11 +422,11 @@ function handleServerMessage(msg) {
 function renderLobbyRoomList(rooms) {
   const container = document.getElementById('room-list-container');
   const countText = document.getElementById('room-count-text');
-  countText.textContent = `총 ${rooms.length}개 방`;
+  countText.textContent = `${rooms.length} ROOMS`;
 
   if (rooms.length === 0) {
     container.innerHTML =
-      '<div class="empty-room-msg">현재 생성된 방이 없습니다. 상단에서 [➕ 방 만들기]를 눌러 새 방을 만들어 보세요!</div>';
+      '<div class="empty-room-msg">NO ROOMS. CLICK [➕ CREATE] TO MAKE A ROOM!</div>';
     return;
   }
 
@@ -470,20 +438,20 @@ function renderLobbyRoomList(rooms) {
 
     const statusLabel =
       r.status === 'playing'
-        ? `대결 중 (${r.playerCount}/${r.maxPlayers})`
+        ? `PLAYING (${r.playerCount}/${r.maxPlayers})`
         : isFull
-        ? `입장 완료 (${r.playerCount}/${r.maxPlayers})`
-        : `대기 중 (${r.playerCount}/${r.maxPlayers})`;
+        ? `FULL (${r.playerCount}/${r.maxPlayers})`
+        : `OPEN (${r.playerCount}/${r.maxPlayers})`;
 
     item.innerHTML = `
       <div class="room-info">
         <div class="room-title">${escapeHtml(r.title)}</div>
-        <div class="room-meta">방장 : <strong>${escapeHtml(r.hostName)}</strong></div>
+        <div class="room-meta">HOST : <strong>${escapeHtml(r.hostName)}</strong></div>
       </div>
       <div class="room-actions">
         <span class="room-status-pill ${isFull ? 'full' : 'open'}">${statusLabel}</span>
         <button class="btn-join-room" type="button" ${isFull ? 'disabled' : ''}>
-          ${isFull ? '입장 불가' : '입장하기 ▶'}
+          ${isFull ? 'FULL' : 'JOIN ▶'}
         </button>
       </div>
     `;
@@ -507,7 +475,7 @@ function escapeHtml(str) {
 }
 
 // ==========================================
-// 멀티플레이 방 입장 및 대결 동기화
+// 멀티플레이 동기화
 // ==========================================
 function handleMultiplayerRoomUpdate(room) {
   state.mode = 'multi';
@@ -518,7 +486,7 @@ function handleMultiplayerRoomUpdate(room) {
   }
 
   const modeBadge = document.getElementById('game-mode-badge');
-  modeBadge.textContent = `🌐 멀티플레이 (${room.title})`;
+  modeBadge.textContent = 'MULTI';
   modeBadge.className = 'mode-tag multi-tag';
 
   document.getElementById('my-name-display').textContent = state.nickname;
@@ -535,8 +503,7 @@ function handleMultiplayerRoomUpdate(room) {
   const chantEl = document.getElementById('chant-text');
 
   if (!room.opp) {
-    // 상대방 대기 중 (1/2)
-    state.oppNickname = '대기 중...';
+    state.oppNickname = 'WAITING';
     state.opp = {
       life: MAX_LIFE,
       special: 0,
@@ -548,20 +515,22 @@ function handleMultiplayerRoomUpdate(room) {
     state.canSelect = false;
     state.isGameOver = false;
 
-    document.getElementById('opp-name-label').textContent = `👤 상대방 대기 중 :`;
+    document.getElementById('opp-name-label').textContent = 'OPP LIFE';
     startBtn.disabled = true;
-    startBtn.textContent = '⏳ 상대방 입장 대기 중 (1/2)';
-    chantEl.innerHTML = '상대방이 대기실에서 이 방에 입장하면 <strong>[시작]</strong> 버튼이 활성화됩니다.';
-    subtextEl.textContent = '다른 브라우저 탭이나 다른 기기에서 대기실의 이 방을 선택해 입장해 보세요!';
+    startBtn.textContent = '⏳ WAITING (1/2)';
+    chantEl.innerHTML = 'WAITING FOR PLAYER...';
+    subtextEl.textContent = 'WAIT FOR OPPONENT TO JOIN';
   } else {
-    // 2명 입장 완료!
     state.oppNickname = room.opp.nickname;
     state.opp.life = room.opp.life;
     state.opp.special = room.opp.special;
     state.opp.streak = room.opp.streak;
+    if (room.opp.cards) {
+      state.opp.cards = { ...room.opp.cards };
+    }
     state.opp.totalCards = room.opp.totalCards;
 
-    document.getElementById('opp-name-label').textContent = `👤 ${state.oppNickname} 생명 :`;
+    document.getElementById('opp-name-label').textContent = `${state.oppNickname}`;
 
     if (room.status === 'ready') {
       state.isRunning = false;
@@ -569,11 +538,11 @@ function handleMultiplayerRoomUpdate(room) {
       state.isGameOver = false;
       initMiniDecks();
       startBtn.disabled = false;
-      startBtn.textContent = '▶ 시작 (대결 스타트!)';
-      chantEl.innerHTML = `상대방(<strong>${escapeHtml(state.oppNickname)}</strong>) 입장 완료! <strong>[시작]</strong> 버튼을 누르면 대결이 시작됩니다!`;
-      subtextEl.textContent = '시작을 누르면 양쪽 화면에 동시에 "가위 바위 보"가 진행됩니다!';
+      startBtn.textContent = '▶ START';
+      chantEl.innerHTML = `VS <strong>${escapeHtml(state.oppNickname)}</strong> — PRESS <strong>[START]</strong>!`;
+      subtextEl.textContent = 'PRESS START BELOW';
       document.getElementById('opp-hand-Visual').innerHTML = '<span class="question-mark">❓</span>';
-      document.getElementById('opp-hand-name').textContent = `${state.oppNickname} 준비 완료`;
+      document.getElementById('opp-hand-name').textContent = 'READY';
       document.getElementById('round-result-overlay').classList.add('hidden');
     }
   }
@@ -594,7 +563,7 @@ function handleMultiplayerRoundStart(roundNum, chantTotalMs) {
 
   const startBtn = document.getElementById('btn-start-game');
   startBtn.disabled = true;
-  startBtn.textContent = '⚡ 실시간 대결 진행 중...';
+  startBtn.textContent = '⚡ PLAYING...';
 
   runChantVisualsAndAudio(chantTotalMs || CHANT_TOTAL_MS);
 }
@@ -609,8 +578,7 @@ function handleMultiplayerCardLocked(choice) {
   if (btn) btn.classList.add('selected-card');
   renderCardCounts();
 
-  document.getElementById('status-subtext').textContent =
-    `✅ [${CHOICE_META[choice].name}] 카드 선택 완료! "가위 바위 보" 종료 시 결과가 공개됩니다...`;
+  document.getElementById('status-subtext').textContent = `✅ SELECTED : ${CHOICE_META[choice].name}`;
 }
 
 function handleMultiplayerRoundResult(msg) {
@@ -630,13 +598,15 @@ function handleMultiplayerRoundResult(msg) {
   state.opp.life = msg.opp.life;
   state.opp.special = msg.opp.special;
   state.opp.streak = msg.opp.streak;
+  if (msg.opp.cards) {
+    state.opp.cards = { ...msg.opp.cards };
+  }
   state.opp.totalCards = msg.opp.totalCards;
 
   document.getElementById('timer-bar-wrap').classList.add('hidden');
   const oppScreen = document.getElementById('opponent-screen');
   const oppVisual = document.getElementById('opp-hand-Visual');
   const oppName = document.getElementById('opp-hand-name');
-  const oppDesc = document.getElementById('opp-screen-desc');
   const chantEl = document.getElementById('chant-text');
   const resultOverlay = document.getElementById('round-result-overlay');
   const resultTitle = document.getElementById('round-result-title');
@@ -651,54 +621,55 @@ function handleMultiplayerRoundResult(msg) {
     oppVisual.innerHTML = '<span class="question-mark">⏰</span>';
 
     if (msg.outcome === 'timeout_me') {
-      oppName.textContent = '나의 시간 초과! (미선택)';
-      oppDesc.textContent = '"가위 바위 보"가 끝나기 전에 선택하지 못해 내 생명 게이지만 1칸 감소합니다.';
+      oppName.textContent = 'TIME OUT!';
       resultOverlay.classList.add('lose');
-      resultTitle.textContent = '시간 초과 (1패)';
-      resultDetail.textContent = '내 생명 게이지 -1칸 감소';
-      chantEl.innerHTML = '<strong>시간 초과!</strong> 제때 선택하지 못해 내 생명 게이지가 1칸 줄어듭니다.';
+      resultTitle.textContent = '💧울지마!';
+      resultDetail.textContent = 'MY -1 / SP+1';
+      chantEl.innerHTML = '<strong>"울지마!"</strong> (TIME OUT: MY -1 &amp; SP +1)';
+      speakKorean('울지마!');
     } else if (msg.outcome === 'timeout_opp') {
-      oppName.textContent = `${state.oppNickname} 시간 초과!`;
-      oppDesc.textContent = '상대방이 시간 내에 카드를 선택하지 못해 상대 생명 게이지가 1칸 감소합니다.';
+      oppName.textContent = 'OPP TIME OUT!';
       resultOverlay.classList.add('win');
-      resultTitle.textContent = '상대 시간 초과!';
-      resultDetail.textContent = '상대 생명 게이지 -1칸 감소';
-      chantEl.innerHTML = `<strong>상대 시간 초과!</strong> 상대방(${escapeHtml(state.oppNickname)})의 생명 게이지가 1칸 줄어듭니다.`;
+      resultTitle.textContent = '🎉이겼다!';
+      resultDetail.textContent = 'OPP -1';
+      chantEl.innerHTML = '<strong>"이겼다!"</strong> (OPP TIME OUT: OPP -1)';
+      speakKorean('이겼다!');
     } else {
-      oppName.textContent = '양쪽 모두 시간 초과!';
-      oppDesc.textContent = '양쪽 모두 시간 내에 선택하지 못해 각자 생명 게이지가 1칸씩 감소합니다.';
+      oppName.textContent = 'BOTH TIME OUT!';
       resultOverlay.classList.add('lose');
-      resultTitle.textContent = '동시 시간 초과';
-      resultDetail.textContent = '양쪽 생명 게이지 -1칸씩 감소';
-      chantEl.innerHTML = '<strong>동시 시간 초과!</strong> 양쪽 모두 생명 게이지가 1칸씩 줄어듭니다.';
+      resultTitle.textContent = '💧울지마!';
+      resultDetail.textContent = 'BOTH -1';
+      chantEl.innerHTML = '<strong>"울지마!"</strong> (BOTH LIFE -1 &amp; SP +1)';
+      speakKorean('울지마!');
     }
   } else {
     const myChoice = msg.myChoice;
     const oppChoice = msg.oppChoice;
     oppVisual.innerHTML = HAND_SVGS[oppChoice];
-    oppName.textContent = `${state.oppNickname} 선택 : ${CHOICE_META[oppChoice].name}!`;
-    oppDesc.textContent = `나의 선택 [${CHOICE_META[myChoice].name}] vs ${state.oppNickname} 선택 [${CHOICE_META[oppChoice].name}]`;
+    oppName.textContent = `${CHOICE_META[oppChoice].name}!`;
 
     if (msg.outcome === 'win') {
       const dmg = prevOppLife - state.opp.life;
       playSoundEffect(dmg >= 3 && prevPlayerSpecial >= MAX_SPECIAL ? 'special-hit' : 'win');
+      speakKorean('이겼다!');
       resultOverlay.classList.add('win');
-      resultTitle.textContent = `라운드 승리! (${msg.reason})`;
-      resultDetail.textContent = `상대 생명 게이지 -${dmg}칸 감소!`;
-      chantEl.innerHTML = `<strong>승리!</strong> [${CHOICE_META[myChoice].name}]로 [${CHOICE_META[oppChoice].name}]를 이겼습니다! (${msg.reason})`;
+      resultTitle.textContent = '🎉이겼다!';
+      resultDetail.textContent = `OPP -${dmg}`;
+      chantEl.innerHTML = `<strong>"이겼다!"</strong> ${CHOICE_META[myChoice].name} vs ${CHOICE_META[oppChoice].name} (OPP -${dmg})`;
     } else if (msg.outcome === 'lose') {
       const dmg = prevPlayerLife - state.player.life;
       playSoundEffect(dmg >= 3 && prevOppSpecial >= MAX_SPECIAL ? 'special-hit' : 'lose');
+      speakKorean('울지마!');
       resultOverlay.classList.add('lose');
-      resultTitle.textContent = `라운드 패배 (${msg.reason})`;
-      resultDetail.textContent = `내 생명 게이지 -${dmg}칸 감소 / 내 필살기 +1`;
-      chantEl.innerHTML = `<strong>패배...</strong> 상대의 [${CHOICE_META[oppChoice].name}]에게 졌습니다. (내 생명 -${dmg}, 필살기 +1)`;
+      resultTitle.textContent = '💧울지마!';
+      resultDetail.textContent = `MY -${dmg} / SP+1`;
+      chantEl.innerHTML = `<strong>"울지마!"</strong> ${CHOICE_META[myChoice].name} vs ${CHOICE_META[oppChoice].name} (MY -${dmg})`;
     } else {
       playSoundEffect('draw');
       resultOverlay.classList.add('draw');
-      resultTitle.textContent = '비겼습니다!';
-      resultDetail.textContent = '양쪽 필살기 게이지 +1칸 상승';
-      chantEl.innerHTML = `<strong>무승부!</strong> 같은 [${CHOICE_META[myChoice].name}]를 내서 양쪽 필살기 게이지가 1칸씩 올라갑니다.`;
+      resultTitle.textContent = '🤝비김';
+      resultDetail.textContent = 'SP +1';
+      chantEl.innerHTML = `<strong>DRAW!</strong> (${CHOICE_META[myChoice].name}) — SP +1`;
     }
   }
 
@@ -711,7 +682,6 @@ function handleMultiplayerRoundResult(msg) {
 
   updateAllUI(prevPlayerLife, prevOppLife);
 
-  // 아직 게임이 끝나지 않았다면 5초 카운트다운 표시
   const playerRemaining =
     state.player.cards.scissors + state.player.cards.paper + state.player.cards.rock;
   if (state.player.life > 0 && state.opp.life > 0 && !(playerRemaining === 0 && state.opp.totalCards === 0)) {
@@ -722,25 +692,33 @@ function handleMultiplayerRoundResult(msg) {
 function startCountdownTextOnly() {
   const subtextEl = document.getElementById('status-subtext');
   const totalSec = Math.floor(NEXT_ROUND_DELAY_MS / 1000);
-  subtextEl.textContent = `⏳ ${totalSec}초 후 다음 "가위 바위 보" 라운드가 자동으로 시작됩니다... (${totalSec}초)`;
+  subtextEl.textContent = `⏳ NEXT ROUND IN ${totalSec}s...`;
 
   for (let sec = 1; sec < totalSec; sec++) {
     const remainingSec = totalSec - sec;
     registerTimeout(() => {
       if (!state.isGameOver && state.isRunning) {
-        subtextEl.textContent = `⏳ 잠시 후 다음 "가위 바위 보" 라운드가 시작됩니다... (${remainingSec}초)`;
+        subtextEl.textContent = `⏳ NEXT ROUND IN ${remainingSec}s...`;
       }
     }, sec * 1000);
   }
 }
 
 // ==========================================
-// 공용 UI 렌더링 및 "가위 바위 보" 연출
+// 공용 UI 렌더링
 // ==========================================
 function initHandIllustrations() {
   document.getElementById('svg-scissors').innerHTML = HAND_SVGS.scissors;
   document.getElementById('svg-paper').innerHTML = HAND_SVGS.paper;
   document.getElementById('svg-rock').innerHTML = HAND_SVGS.rock;
+
+  // 상대편 생명 게이지 옆 작은 가위/보/바위 이미지 초기화
+  const oppSc = document.getElementById('opp-svg-scissors');
+  const oppPa = document.getElementById('opp-svg-paper');
+  const oppRo = document.getElementById('opp-svg-rock');
+  if (oppSc) oppSc.innerHTML = HAND_SVGS.scissors;
+  if (oppPa) oppPa.innerHTML = HAND_SVGS.paper;
+  if (oppRo) oppRo.innerHTML = HAND_SVGS.rock;
 }
 
 function initMiniDecks() {
@@ -752,7 +730,6 @@ function initMiniDecks() {
       mini.className = 'mini-card';
       mini.id = `mini-${choice}-${i}`;
       mini.textContent = CHOICE_META[choice].emoji;
-      mini.title = `${CHOICE_META[choice].name} 카드 #${i + 1}`;
       deckEl.appendChild(mini);
     }
   });
@@ -799,11 +776,7 @@ function renderSpecialBar(barId, readyBadgeId, specialCount) {
 function renderStreakBadge(badgeId, streakCount) {
   const badge = document.getElementById(badgeId);
   if (streakCount >= 2) {
-    const bonusDmg = streakCount >= 3 ? 3 : 2;
-    badge.textContent = `🔥 ${streakCount}연승 중! (승리 시 -${bonusDmg})`;
-    badge.classList.remove('hidden');
-  } else if (streakCount === 1) {
-    badge.textContent = `1승 중 (연승 시 -2)`;
+    badge.textContent = `🔥${streakCount}WIN`;
     badge.classList.remove('hidden');
   } else {
     badge.classList.add('hidden');
@@ -840,6 +813,15 @@ function renderCardCounts() {
         }
       }
     }
+
+    // 상대편 가위/보/바위 남은 숫자 업데이트
+    const oppRem = state.opp.cards ? state.opp.cards[choice] : INITIAL_CARD_COUNT;
+    const oppCountEl = document.getElementById(`opp-count-${choice}`);
+    const oppChipEl = document.getElementById(`opp-chip-${choice}`);
+    if (oppCountEl) oppCountEl.textContent = oppRem;
+    if (oppChipEl) {
+      oppChipEl.classList.toggle('empty-chip', oppRem <= 0);
+    }
   });
 
   const oppTotal =
@@ -849,7 +831,7 @@ function renderCardCounts() {
 
   document.getElementById('player-total-cards').textContent = playerTotal;
   document.getElementById('opp-total-cards').textContent = oppTotal;
-  document.getElementById('round-indicator').textContent = `ROUND ${state.round}`;
+  document.getElementById('round-indicator').textContent = `R${state.round}`;
 }
 
 function updateAllUI(prevPlayerLife = state.player.life, prevOppLife = state.opp.life) {
@@ -866,7 +848,7 @@ function updateAllUI(prevPlayerLife = state.player.life, prevOppLife = state.opp
   renderAllStatsUI();
 }
 
-// "가위, 바위, 보!" 화면/음성/상대 화면 순환 공용 연출
+// "가위, 바위, 보!" 연출
 function runChantVisualsAndAudio(totalMs) {
   document.querySelectorAll('.main-hand-card').forEach((btn) => btn.classList.remove('selected-card'));
   document.getElementById('round-result-overlay').classList.add('hidden');
@@ -879,9 +861,8 @@ function runChantVisualsAndAudio(totalMs) {
   const oppScreen = document.getElementById('opponent-screen');
   const oppVisual = document.getElementById('opp-hand-Visual');
   const oppName = document.getElementById('opp-hand-name');
-  const oppDesc = document.getElementById('opp-screen-desc');
 
-  subtextEl.textContent = '🚨 지금 "가위, 바위, 보"가 끝나기 전에 아래 카드를 클릭하세요!';
+  subtextEl.textContent = '🚨 SELECT A CARD NOW!';
 
   timerWrap.classList.remove('hidden');
   timerFill.style.transition = 'none';
@@ -891,13 +872,12 @@ function runChantVisualsAndAudio(totalMs) {
   timerFill.style.transform = 'scaleX(0)';
 
   oppScreen.classList.add('cycling');
-  oppDesc.textContent = '가위, 바위, 보가 끝나기 전에 카드를 선택하세요!';
 
   let cycleIdx = 0;
   cycleIntervalId = setInterval(() => {
     const current = ALL_CHOICES[cycleIdx % 3];
     oppVisual.innerHTML = HAND_SVGS[current];
-    oppName.textContent = `${CHOICE_META[current].name} ...`;
+    oppName.textContent = `${CHOICE_META[current].name}...`;
     cycleIdx++;
   }, 85);
 
@@ -923,19 +903,19 @@ function runChantVisualsAndAudio(totalMs) {
 }
 
 // ==========================================
-// 싱글플레이 전용 로직 (컴퓨터 AI 대전)
+// 싱글플레이 로직
 // ==========================================
 function enterSinglePlayMode() {
   syncNicknameFromInput();
   state.mode = 'single';
-  state.oppNickname = '컴퓨터(AI)';
+  state.oppNickname = 'AI';
 
   const modeBadge = document.getElementById('game-mode-badge');
-  modeBadge.textContent = '🤖 싱글플레이';
+  modeBadge.textContent = 'SINGLE';
   modeBadge.className = 'mode-tag';
 
   document.getElementById('my-name-display').textContent = state.nickname;
-  document.getElementById('opp-name-label').textContent = '🤖 상대(AI) 생명 :';
+  document.getElementById('opp-name-label').textContent = 'OPP LIFE';
 
   showScreen('game');
   resetSinglePlayToReady();
@@ -976,19 +956,15 @@ function resetSinglePlayToReady() {
 
   const startBtn = document.getElementById('btn-start-game');
   startBtn.disabled = false;
-  startBtn.textContent = '▶ 시작 (대결 스타트!)';
+  startBtn.textContent = '▶ START';
 
-  document.getElementById('status-subtext').textContent =
-    '시작을 누르면 "가위 바위 보"가 끝날 때까지 카드를 선택해야 합니다! (미선택 시 내 생명 -1)';
-
+  document.getElementById('status-subtext').textContent = 'PRESS START TO PLAY';
   document.getElementById('opp-hand-Visual').innerHTML = '<span class="question-mark">❓</span>';
-  document.getElementById('opp-hand-name').textContent = '상대편 대기 중';
-  document.getElementById('opp-screen-desc').textContent =
-    '가위, 바위, 보가 계속 빠르게 바뀌다가 상대편 선택이 최종적으로 보입니다.';
+  document.getElementById('opp-hand-name').textContent = 'READY';
 
   const chantEl = document.getElementById('chant-text');
   chantEl.classList.remove('shouting');
-  chantEl.innerHTML = '<strong>[시작]</strong> 버튼을 누르면 "가위, 바위, 보!"가 시작됩니다!';
+  chantEl.innerHTML = 'PRESS <strong>[START]</strong> BELOW!';
 
   initMiniDecks();
   updateAllUI();
@@ -1035,7 +1011,6 @@ function finishSinglePlayChantAndResolve() {
   const oppScreen = document.getElementById('opponent-screen');
   const oppVisual = document.getElementById('opp-hand-Visual');
   const oppName = document.getElementById('opp-hand-name');
-  const oppDesc = document.getElementById('opp-screen-desc');
   const chantEl = document.getElementById('chant-text');
   const resultOverlay = document.getElementById('round-result-overlay');
   const resultTitle = document.getElementById('round-result-title');
@@ -1044,22 +1019,28 @@ function finishSinglePlayChantAndResolve() {
   oppScreen.classList.remove('cycling');
   chantEl.classList.remove('shouting');
 
-  // 미선택 시간 초과 -> 내 생명 게이지만 1칸 감소
+  // 미선택 시간 초과 -> 내 생명 게이지 1칸 감소 + 내 필살기 게이지 1칸 증가!
   if (!state.selectedChoice) {
     const prevPlayerLife = state.player.life;
+    const prevPlayerSpecial = state.player.special;
+
     state.player.life = Math.max(0, state.player.life - 1);
+    state.player.special = Math.min(MAX_SPECIAL, state.player.special + 1);
     state.player.streak = 0;
 
     playSoundEffect('timeout');
+    if (prevPlayerSpecial < MAX_SPECIAL && state.player.special === MAX_SPECIAL) {
+      setTimeout(() => playSoundEffect('special-full'), 260);
+    }
 
     oppVisual.innerHTML = '<span class="question-mark">⏰</span>';
-    oppName.textContent = '시간 초과! (미선택)';
-    oppDesc.textContent = '"가위 바위 보"가 끝나기 전에 선택하지 못해 내 생명 게이지가 1칸 감소합니다.';
+    oppName.textContent = 'TIME OUT!';
 
     resultOverlay.className = 'round-result-overlay lose';
-    resultTitle.textContent = '시간 초과 (1패)';
-    resultDetail.textContent = '내 생명 게이지 -1칸 감소';
-    chantEl.innerHTML = '<strong>시간 초과!</strong> 제때 선택하지 못해 내 생명 게이지가 1칸 줄어듭니다.';
+    resultTitle.textContent = '💧울지마!';
+    resultDetail.textContent = 'MY -1 / SP+1';
+    chantEl.innerHTML = '<strong>"울지마!"</strong> (TIME OUT: MY -1 &amp; SP +1)';
+    speakKorean('울지마!');
 
     updateAllUI(prevPlayerLife, state.opp.life);
     checkSinglePlayEndOrScheduleNext();
@@ -1073,8 +1054,7 @@ function finishSinglePlayChantAndResolve() {
   state.opp.cards[oppChoice] -= 1;
 
   oppVisual.innerHTML = HAND_SVGS[oppChoice];
-  oppName.textContent = `상대편 선택 : ${CHOICE_META[oppChoice].name}!`;
-  oppDesc.textContent = `나의 선택 [${CHOICE_META[playerChoice].name}] vs 상대편 선택 [${CHOICE_META[oppChoice].name}]`;
+  oppName.textContent = `${CHOICE_META[oppChoice].name}!`;
 
   const outcome = judgeRound(playerChoice, oppChoice);
   const prevPlayerLife = state.player.life;
@@ -1089,19 +1069,19 @@ function finishSinglePlayChantAndResolve() {
     state.opp.streak = 0;
 
     let damage = 1;
-    let damageReason = '기본 승리';
+    let damageTag = 'WIN';
     if (state.player.special >= MAX_SPECIAL) {
       damage = 3;
-      damageReason = '⚡ 필살기 발동!';
+      damageTag = '⚡SP!';
       state.player.special = 0;
       playSoundEffect('special-hit');
     } else {
       if (state.player.streak === 2) {
         damage = 2;
-        damageReason = '🔥 2연승 보너스!';
+        damageTag = '🔥2WIN';
       } else if (state.player.streak >= 3) {
         damage = 3;
-        damageReason = `🔥🔥 ${state.player.streak}연승 보너스!`;
+        damageTag = `🔥${state.player.streak}WIN`;
       }
       playSoundEffect('win');
     }
@@ -1109,28 +1089,29 @@ function finishSinglePlayChantAndResolve() {
     state.opp.life = Math.max(0, state.opp.life - damage);
     state.opp.special = Math.min(MAX_SPECIAL, state.opp.special + 1);
 
+    speakKorean('이겼다!');
     resultOverlay.classList.add('win');
-    resultTitle.textContent = `라운드 승리! (${damageReason})`;
-    resultDetail.textContent = `상대 생명 게이지 -${damage}칸 감소!`;
-    chantEl.innerHTML = `<strong>승리!</strong> [${CHOICE_META[playerChoice].name}]로 [${CHOICE_META[oppChoice].name}]를 이겼습니다! (${damageReason} ➔ 상대 생명 -${damage})`;
+    resultTitle.textContent = '🎉이겼다!';
+    resultDetail.textContent = `OPP -${damage}`;
+    chantEl.innerHTML = `<strong>"이겼다!"</strong> ${CHOICE_META[playerChoice].name} vs ${CHOICE_META[oppChoice].name} (OPP -${damage})`;
   } else if (outcome === 'lose') {
     state.opp.streak += 1;
     state.player.streak = 0;
 
     let damage = 1;
-    let damageReason = '라운드 패배';
+    let damageTag = 'LOSE';
     if (state.opp.special >= MAX_SPECIAL) {
       damage = 3;
-      damageReason = '⚠️ 상대 필살기 발동!';
+      damageTag = '⚠️SP!';
       state.opp.special = 0;
       playSoundEffect('special-hit');
     } else {
       if (state.opp.streak === 2) {
         damage = 2;
-        damageReason = '상대 2연승!';
+        damageTag = '2WIN';
       } else if (state.opp.streak >= 3) {
         damage = 3;
-        damageReason = `상대 ${state.opp.streak}연승!`;
+        damageTag = `${state.opp.streak}WIN`;
       }
       playSoundEffect('lose');
     }
@@ -1138,10 +1119,11 @@ function finishSinglePlayChantAndResolve() {
     state.player.life = Math.max(0, state.player.life - damage);
     state.player.special = Math.min(MAX_SPECIAL, state.player.special + 1);
 
+    speakKorean('울지마!');
     resultOverlay.classList.add('lose');
-    resultTitle.textContent = `라운드 패배 (${damageReason})`;
-    resultDetail.textContent = `내 생명 게이지 -${damage}칸 감소 / 내 필살기 +1`;
-    chantEl.innerHTML = `<strong>패배...</strong> 상대의 [${CHOICE_META[oppChoice].name}]에게 졌습니다. (내 생명 -${damage}, 필살기 게이지 +1)`;
+    resultTitle.textContent = '💧울지마!';
+    resultDetail.textContent = `MY -${damage} / SP+1`;
+    chantEl.innerHTML = `<strong>"울지마!"</strong> ${CHOICE_META[playerChoice].name} vs ${CHOICE_META[oppChoice].name} (MY -${damage})`;
   } else {
     state.player.streak = 0;
     state.opp.streak = 0;
@@ -1150,9 +1132,9 @@ function finishSinglePlayChantAndResolve() {
     playSoundEffect('draw');
 
     resultOverlay.classList.add('draw');
-    resultTitle.textContent = '비겼습니다!';
-    resultDetail.textContent = '양쪽 필살기 게이지 +1칸 상승';
-    chantEl.innerHTML = `<strong>무승부!</strong> 같은 [${CHOICE_META[playerChoice].name}]를 내서 양쪽 필살기 게이지가 1칸씩 올라갑니다.`;
+    resultTitle.textContent = '🤝비김';
+    resultDetail.textContent = 'SP +1';
+    chantEl.innerHTML = `<strong>DRAW!</strong> (${CHOICE_META[playerChoice].name}) — SP +1`;
   }
 
   if (
@@ -1178,11 +1160,11 @@ function checkSinglePlayEndOrScheduleNext() {
     renderCardCounts();
     registerTimeout(() => {
       if (state.opp.life <= 0) {
-        finishGame('win', '상대편의 생명 게이지가 0이 되어 게임에서 승리했습니다!');
+        finishGame('win', '상대편 생명 게이지가 0이 되어 승리했습니다!');
       } else {
-        finishGame('lose', '나의 생명 게이지가 0이 되어 게임에서 패배했습니다.');
+        finishGame('lose', '나의 생명 게이지가 0이 되어 패배했습니다.');
       }
-    }, 900);
+    }, 850);
     return;
   }
 
@@ -1194,20 +1176,20 @@ function checkSinglePlayEndOrScheduleNext() {
       if (state.player.life > state.opp.life) {
         finishGame(
           'win',
-          `양쪽 모두 9장의 카드를 모두 사용했습니다! 남은 생명 게이지가 더 많아(나: ${state.player.life}칸 vs 상대: ${state.opp.life}칸) 승리했습니다!`
+          `9장 모두 소진! 남은 생명이 더 많아(${state.player.life} vs ${state.opp.life}) 승리!`
         );
       } else if (state.player.life < state.opp.life) {
         finishGame(
           'lose',
-          `양쪽 모두 9장의 카드를 모두 사용했습니다. 남은 생명 게이지가 더 적어(나: ${state.player.life}칸 vs 상대: ${state.opp.life}칸) 패배했습니다.`
+          `9장 모두 소진! 남은 생명이 더 적어(${state.player.life} vs ${state.opp.life}) 패배.`
         );
       } else {
         finishGame(
           'draw',
-          `대결하는 2명 모두 가위(3장), 바위(3장), 보(3장)를 모두 사용했고, 남은 생명 게이지가 ${state.player.life}칸으로 같아 이 게임은 무승부로 끝납니다!`
+          `9장 모두 소진! 남은 생명이 ${state.player.life}칸으로 같아 무승부로 끝납니다!`
         );
       }
-    }, 950);
+    }, 900);
     return;
   }
 
@@ -1222,7 +1204,7 @@ function checkSinglePlayEndOrScheduleNext() {
 }
 
 // ==========================================
-// 공용 버튼 핸들러 (시작 / 카드 선택 / 종료 모달)
+// 공용 버튼 핸들러
 // ==========================================
 function handleStartButtonClick() {
   getAudioContext();
@@ -1231,10 +1213,9 @@ function handleStartButtonClick() {
     state.isRunning = true;
     const startBtn = document.getElementById('btn-start-game');
     startBtn.disabled = true;
-    startBtn.textContent = '⚡ 대결 진행 중...';
+    startBtn.textContent = '⚡ PLAYING...';
     beginSinglePlayRound();
   } else {
-    // 멀티플레이
     wsSend({ type: 'start_match' });
   }
 }
@@ -1250,10 +1231,8 @@ function handleCardSelect(choice) {
     document.querySelectorAll('.main-hand-card').forEach((btn) => btn.classList.remove('selected-card'));
     document.getElementById(`btn-${choice}`).classList.add('selected-card');
     renderCardCounts();
-    document.getElementById('status-subtext').textContent =
-      `✅ [${CHOICE_META[choice].name}] 카드 선택 완료! 결과를 확인합니다...`;
+    document.getElementById('status-subtext').textContent = `✅ SELECTED : ${CHOICE_META[choice].name}`;
   } else {
-    // 멀티플레이 서버로 전송
     wsSend({ type: 'select_card', choice });
   }
 }
@@ -1285,36 +1264,38 @@ function finishGame(finalResult, reasonText) {
   badge.className = `modal-badge ${finalResult}`;
   if (finalResult === 'win') {
     badge.textContent = 'VICTORY';
-    title.textContent = '🎉 게임 승리!';
+    title.textContent = '🎉 아싸! 이겼다!';
+    speakKorean('아싸! 이겼다!');
   } else if (finalResult === 'lose') {
     badge.textContent = 'DEFEAT';
-    title.textContent = '😢 게임 패배';
+    title.textContent = '😢 분발해라!!';
+    speakKorean('분발해라!');
   } else {
-    badge.textContent = 'DRAW GAME';
-    title.textContent = '🤝 무승부!';
+    badge.textContent = 'DRAW';
+    title.textContent = '🤝 DRAW!';
   }
 
   reason.textContent = reasonText;
 
-  document.getElementById('modal-my-name').textContent = `나 (${state.nickname})`;
+  document.getElementById('modal-my-name').textContent = state.nickname;
   document.getElementById('modal-opp-name').textContent = state.oppNickname;
 
   const formatStars = (life) => '★'.repeat(life) + '☆'.repeat(MAX_LIFE - life);
   document.getElementById('modal-player-stars').textContent = formatStars(state.player.life);
-  document.getElementById('modal-player-life-text').textContent = `남은 생명 게이지: ${state.player.life}칸`;
+  document.getElementById('modal-player-life-text').textContent = `LIFE: ${state.player.life}`;
   document.getElementById('modal-opp-stars').textContent = formatStars(state.opp.life);
-  document.getElementById('modal-opp-life-text').textContent = `남은 생명 게이지: ${state.opp.life}칸`;
+  document.getElementById('modal-opp-life-text').textContent = `LIFE: ${state.opp.life}`;
 
   const winrate = calcWinRate(targetStats);
   document.getElementById('modal-mode-label').textContent =
-    modeKey === 'multi' ? '멀티플레이' : '싱글플레이';
+    modeKey === 'multi' ? 'MULTI' : 'SINGLE';
   document.getElementById('modal-record-text').textContent =
-    `${targetStats.wins}승 ${targetStats.losses}패 ${targetStats.draws}무 (승률 ${winrate}%)`;
+    `W:${targetStats.wins} L:${targetStats.losses} D:${targetStats.draws} (${winrate}%)`;
 
   const playAgainBtn = document.getElementById('btn-play-again');
   const leaveModalBtn = document.getElementById('btn-modal-leave');
   playAgainBtn.textContent = '🔄 다시 한번 더';
-  leaveModalBtn.textContent = modeKey === 'multi' ? '🚪 대기실로' : '🏠 메인 화면으로';
+  leaveModalBtn.textContent = modeKey === 'multi' ? '🚪 대기실로' : '🏠 MENU';
 
   modal.classList.remove('hidden');
 }
@@ -1332,20 +1313,15 @@ function handleLeaveArena() {
   }
 }
 
-// ==========================================
-// 초기 이벤트 바인딩
-// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
   initHandIllustrations();
   loadAllStats();
   showScreen('menu');
 
-  // 메인 화면 -> 싱글플레이 선택
   document.getElementById('btn-mode-single').addEventListener('click', () => {
     enterSinglePlayMode();
   });
 
-  // 메인 화면 -> 멀티플레이 대기실 선택
   document.getElementById('btn-mode-multi').addEventListener('click', () => {
     syncNicknameFromInput();
     state.mode = 'multi';
@@ -1353,45 +1329,38 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureWebSocketConnected();
   });
 
-  // 대기실 -> 메인 화면으로 돌아가기
   document.getElementById('btn-lobby-back').addEventListener('click', () => {
     showScreen('menu');
   });
 
-  // 대기실 -> 방 만들기
   document.getElementById('btn-create-room').addEventListener('click', () => {
     syncNicknameFromInput();
     ensureWebSocketConnected();
     const titleInput = document.getElementById('input-room-title');
-    const title = titleInput.value.trim() || `${state.nickname}님의 대결방`;
+    const title = titleInput.value.trim() || `${state.nickname}'s ROOM`;
     wsSend({ type: 'create_room', title, nickname: state.nickname });
     titleInput.value = '';
   });
 
-  // 대기실 -> 방 목록 새로고침
   document.getElementById('btn-refresh-rooms').addEventListener('click', () => {
     ensureWebSocketConnected();
     wsSend({ type: 'get_rooms' });
   });
 
-  // 경기장 -> 나가기
   document.getElementById('btn-leave-game').addEventListener('click', () => {
     handleLeaveArena();
   });
 
-  // 경기장 -> 시작 버튼
   document.getElementById('btn-start-game').addEventListener('click', () => {
     handleStartButtonClick();
   });
 
-  // 경기장 -> 가위/보/바위 카드 선택
   ALL_CHOICES.forEach((choice) => {
     document.getElementById(`btn-${choice}`).addEventListener('click', () => {
       handleCardSelect(choice);
     });
   });
 
-  // 모달 -> 다시 한번 더
   document.getElementById('btn-play-again').addEventListener('click', () => {
     if (state.mode === 'single') {
       resetSinglePlayToReady();
@@ -1401,36 +1370,206 @@ document.addEventListener('DOMContentLoaded', () => {
       if (state.room) {
         const startBtn = document.getElementById('btn-start-game');
         startBtn.disabled = !state.room.opp;
-        startBtn.textContent = state.room.opp ? '▶ 시작 (재대결 스타트!)' : '⏳ 상대방 입장 대기 중 (1/2)';
+        startBtn.textContent = state.room.opp ? '▶ START' : '⏳ WAITING (1/2)';
       }
     }
   });
 
-  // 모달 -> 나가기
   document.getElementById('btn-modal-leave').addEventListener('click', () => {
     handleLeaveArena();
   });
 
-  // 현재 모드 전적 초기화
   document.getElementById('btn-reset-stats').addEventListener('click', () => {
     const modeKey = state.mode === 'multi' ? 'multi' : 'single';
     state.stats[modeKey] = { wins: 0, losses: 0, draws: 0 };
     saveStats(modeKey);
   });
 
-  // 소리 켜기/끄기
   const soundBtn = document.getElementById('btn-sound-toggle');
   soundBtn.addEventListener('click', () => {
     state.soundEnabled = !state.soundEnabled;
     if (state.soundEnabled) {
-      soundBtn.textContent = '🔊 소리 켜짐';
+      soundBtn.textContent = '🔊 ON';
       soundBtn.classList.add('sound-on');
     } else {
-      soundBtn.textContent = '🔇 소리 꺼짐';
+      soundBtn.textContent = '🔇 OFF';
       soundBtn.classList.remove('sound-on');
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     }
   });
+
+  initPwaAndShortcutPrompt();
 });
+
+// ==========================================
+// PWA 등록 및 바탕화면 바로가기 아이콘 설치 모달
+// ==========================================
+let deferredInstallPrompt = null;
+let installGuideShown = false;
+
+function isRunningStandalone() {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    window.matchMedia('(display-mode: minimal-ui)').matches ||
+    window.navigator.standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+}
+
+async function initPwaAndShortcutPrompt() {
+  // 1) Service Worker 등록
+  if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
+  const installModal = document.getElementById('install-modal');
+  const confirmBtn = document.getElementById('btn-install-confirm');
+  const laterBtn = document.getElementById('btn-install-later');
+  const openChipBtn = document.getElementById('btn-open-install');
+  const guideBox = document.getElementById('install-guide-box');
+
+  // 이미 설치된 앱 여부 확인 (Web API 지원 브라우저)
+  let relatedInstalled = false;
+  if ('getInstalledRelatedApps' in navigator) {
+    try {
+      const apps = await navigator.getInstalledRelatedApps();
+      if (apps && apps.length > 0) {
+        relatedInstalled = true;
+        localStorage.setItem('rps_shortcut_installed', '1');
+      }
+    } catch (e) {}
+  }
+
+  // 이미 바탕화면 바로가기(standalone)로 실행 중이거나 설치 완료된 경우 상단 설치 버튼 및 팝업 숨김
+  if (isRunningStandalone() || relatedInstalled || localStorage.getItem('rps_shortcut_installed') === '1') {
+    localStorage.setItem('rps_shortcut_installed', '1');
+    localStorage.setItem('rps_visited_once_v1', '1');
+    if (openChipBtn) openChipBtn.classList.add('hidden');
+    if (installModal) installModal.classList.add('hidden');
+    return;
+  }
+
+  // 2) 브라우저 기본 PWA 설치 이벤트 가로채기 (Windows Chrome/Edge, Android Chrome 등)
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (openChipBtn && localStorage.getItem('rps_shortcut_installed') !== '1') {
+      openChipBtn.classList.remove('hidden');
+    }
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    localStorage.setItem('rps_shortcut_installed', '1');
+    localStorage.setItem('rps_visited_once_v1', '1');
+    installModal.classList.add('hidden');
+    if (openChipBtn) openChipBtn.classList.add('hidden');
+  });
+
+  // 3) 최초 1회 접속 시에만 바로가기 설치 팝업창 표시 (2번째 접속부터는 절대 자동 표시 안 함)
+  const hasVisitedBefore = localStorage.getItem('rps_visited_once_v1') === '1';
+  const alreadyInstalled = localStorage.getItem('rps_shortcut_installed') === '1';
+
+  if (!hasVisitedBefore && !alreadyInstalled) {
+    // 첫 접속 기록을 영구 저장하여 2번째 접속부터는 팝업이 뜨지 않게 처리
+    localStorage.setItem('rps_visited_once_v1', '1');
+    setTimeout(() => {
+      openInstallModal();
+    }, 450);
+  }
+
+  if (openChipBtn) {
+    openChipBtn.addEventListener('click', () => {
+      openInstallModal();
+    });
+  }
+
+  if (laterBtn) {
+    laterBtn.addEventListener('click', () => {
+      localStorage.setItem('rps_visited_once_v1', '1');
+      installModal.classList.add('hidden');
+    });
+  }
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', async () => {
+      if (installGuideShown) {
+        installModal.classList.add('hidden');
+        return;
+      }
+      localStorage.setItem('rps_visited_once_v1', '1');
+
+      // Case A: 크롬/엣지/안드로이드 네이티브 바탕화면 앱 설치가 준비된 경우 즉시 실행
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const choiceResult = await deferredInstallPrompt.userChoice;
+        if (choiceResult && choiceResult.outcome === 'accepted') {
+          localStorage.setItem('rps_shortcut_installed', '1');
+          installModal.classList.add('hidden');
+          if (openChipBtn) openChipBtn.classList.add('hidden');
+        }
+        deferredInstallPrompt = null;
+        return;
+      }
+
+      // Case B: 브라우저가 자동 설치 팝업을 아직 띄우지 않은 환경
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+
+      guideBox.classList.remove('hidden');
+      if (isAndroid) {
+        guideBox.innerHTML =
+          '📱 <strong>안드로이드 바탕화면 추가 방법</strong><br/>' +
+          '브라우저 오른쪽 위 메뉴 <strong>[⋮]</strong> (또는 하단 <strong>[≡]</strong>) 버튼을 누른 뒤<br/>' +
+          '👉 <strong>[홈 화면에 추가]</strong> 또는 <strong>[앱 설치]</strong>를 누르시면 바탕화면에 귀여운 아이콘이 바로 생성됩니다!';
+      } else if (isIOS) {
+        guideBox.innerHTML =
+          '📱 <strong>아이폰 바탕화면 추가 방법</strong><br/>' +
+          '하단 가운데 <strong>[공유(네모+화살표)]</strong> 버튼을 누른 뒤<br/>' +
+          '👉 <strong>[홈 화면에 추가]</strong>를 누르시면 바탕화면에 귀여운 아이콘이 생성됩니다!';
+      } else {
+        // Windows PC 등 데스크톱 환경: 바탕화면용 인터넷 바로가기(.url) 파일 생성 + 주소창 앱 설치 안내
+        downloadWindowsShortcutFile();
+        localStorage.setItem('rps_shortcut_installed', '1');
+        guideBox.innerHTML =
+          '💻 <strong>윈도우 바탕화면 바로가기 생성 완료!</strong><br/>' +
+          '1) 다운로드된 <strong>[배틀 가위바위보.url]</strong> 파일을 바탕화면으로 옮기시거나,<br/>' +
+          '2) 주소창 오른쪽 끝의 <strong>[앱 설치(🖥️+)]</strong> 아이콘을 누르시면 바탕화면에 바로가기가 생성됩니다!';
+      }
+      installGuideShown = true;
+      confirmBtn.textContent = '✅ 확인';
+    });
+  }
+}
+
+function openInstallModal() {
+  const installModal = document.getElementById('install-modal');
+  const guideBox = document.getElementById('install-guide-box');
+  const confirmBtn = document.getElementById('btn-install-confirm');
+  if (!installModal) return;
+
+  installGuideShown = false;
+  guideBox.classList.add('hidden');
+  confirmBtn.textContent = '✨ 바로가기 만들기';
+  installModal.classList.remove('hidden');
+}
+
+function downloadWindowsShortcutFile() {
+  const targetUrl = window.location.origin || 'http://localhost:3000';
+  const iconUrl = `${targetUrl}/favicon.ico`;
+  const content = `[InternetShortcut]\r\nURL=${targetUrl}\r\nIconFile=${iconUrl}\r\nIconIndex=0\r\n`;
+  const blob = new Blob([content], { type: 'application/internet-shortcut' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '배틀 가위바위보.url';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 500);
+}
