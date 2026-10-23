@@ -401,9 +401,21 @@ function syncNicknameFromInput() {
 }
 
 // ==========================================
-// WebSocket (멀티플레이)
+// 멀티플레이 네트워크 엔진 (Vercel 서버리스 & 로컬 서버 완벽 지원)
 // ==========================================
 let ws = null;
+let transportMode = 'none'; // 'server' | 'serverless'
+const myClientId = 'p_' + Math.random().toString(36).slice(2, 10);
+const TOPIC_LOBBY = 'battle_rps_v2/lobby';
+const TOPIC_PEER_PREFIX = 'battle_rps_v2/peer/';
+
+// 서버리스 모드 방 목록 및 호스트 상태
+const serverlessRooms = new Map();
+let hostedRoom = null;
+let joinedHostId = null;
+let mqttRxBuffer = new Uint8Array(0);
+let mqttPingInterval = null;
+let hostAnnounceInterval = null;
 
 function ensureWebSocketConnected() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
@@ -415,19 +427,46 @@ function ensureWebSocketConnected() {
   }
 
   updateWsBadge('connecting', 'CONNECTING...');
-  const wsUrl =
-    window.location.protocol === 'file:'
-      ? 'ws://localhost:3000'
-      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+
+  // Vercel / GitHub Pages / 외부 정적 호스팅이거나 file:// 환경이면 즉시 서버리스 글로벌 릴레이로 연결
+  const isLocalServerHost =
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.hostname.endsWith('.lhr.life') ||
+      window.location.hostname.endsWith('.onrender.com')) &&
+    window.location.protocol !== 'file:';
+
+  if (isLocalServerHost) {
+    connectLocalServerWithFallback();
+  } else {
+    connectServerlessRelay();
+  }
+}
+
+function connectLocalServerWithFallback() {
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+  let fallbackTriggered = false;
 
   try {
     ws = new WebSocket(wsUrl);
   } catch (e) {
-    updateWsBadge('disconnected', 'OFFLINE');
+    connectServerlessRelay();
     return;
   }
 
+  const fallbackTimer = setTimeout(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      fallbackTriggered = true;
+      try { ws.close(); } catch (e) {}
+      connectServerlessRelay();
+    }
+  }, 1500);
+
   ws.onopen = () => {
+    if (fallbackTriggered) return;
+    clearTimeout(fallbackTimer);
+    transportMode = 'server';
     updateWsBadge('connected', '🟢 ONLINE');
     wsSend({ type: 'set_nickname', nickname: state.nickname });
     wsSend({ type: 'get_rooms' });
@@ -441,6 +480,122 @@ function ensureWebSocketConnected() {
   };
 
   ws.onclose = () => {
+    if (!fallbackTriggered && transportMode !== 'server') {
+      fallbackTriggered = true;
+      clearTimeout(fallbackTimer);
+      connectServerlessRelay();
+      return;
+    }
+    updateWsBadge('disconnected', '🔴 OFFLINE');
+  };
+
+  ws.onerror = () => {
+    if (!fallbackTriggered && transportMode !== 'server') {
+      fallbackTriggered = true;
+      clearTimeout(fallbackTimer);
+      connectServerlessRelay();
+    }
+  };
+}
+
+// ==========================================
+// Vercel / 정적 호스팅용 서버리스 글로벌 WebSocket 릴레이 (MQTT over WSS)
+// ==========================================
+function encodeMqttLen(len) {
+  const bytes = [];
+  do {
+    let d = len % 128;
+    len = Math.floor(len / 128);
+    if (len > 0) d |= 0x80;
+    bytes.push(d);
+  } while (len > 0);
+  return bytes;
+}
+
+function encodeMqttUtf8(str) {
+  const utf8 = new TextEncoder().encode(str);
+  const out = new Uint8Array(2 + utf8.length);
+  out[0] = (utf8.length >> 8) & 0xff;
+  out[1] = utf8.length & 0xff;
+  out.set(utf8, 2);
+  return out;
+}
+
+function buildMqttConnectPacket(clientId) {
+  const proto = new Uint8Array([0x00, 0x04, 0x4d, 0x51, 0x54, 0x54, 0x04, 0x02, 0x00, 0x3c]);
+  const idPart = encodeMqttUtf8(clientId);
+  const remLen = proto.length + idPart.length;
+  const lenBytes = encodeMqttLen(remLen);
+  const pkt = new Uint8Array(1 + lenBytes.length + remLen);
+  pkt[0] = 0x10;
+  pkt.set(lenBytes, 1);
+  pkt.set(proto, 1 + lenBytes.length);
+  pkt.set(idPart, 1 + lenBytes.length + proto.length);
+  return pkt;
+}
+
+function buildMqttSubscribePacket(topic, packetId) {
+  const topicBytes = encodeMqttUtf8(topic);
+  const remLen = 2 + topicBytes.length + 1;
+  const lenBytes = encodeMqttLen(remLen);
+  const pkt = new Uint8Array(1 + lenBytes.length + remLen);
+  pkt[0] = 0x82;
+  pkt.set(lenBytes, 1);
+  let off = 1 + lenBytes.length;
+  pkt[off++] = (packetId >> 8) & 0xff;
+  pkt[off++] = packetId & 0xff;
+  pkt.set(topicBytes, off);
+  pkt[off + topicBytes.length] = 0x00;
+  return pkt;
+}
+
+function buildMqttPublishPacket(topic, jsonObj) {
+  const topicBytes = encodeMqttUtf8(topic);
+  const payloadBytes = new TextEncoder().encode(JSON.stringify(jsonObj));
+  const remLen = topicBytes.length + payloadBytes.length;
+  const lenBytes = encodeMqttLen(remLen);
+  const pkt = new Uint8Array(1 + lenBytes.length + remLen);
+  pkt[0] = 0x30;
+  pkt.set(lenBytes, 1);
+  pkt.set(topicBytes, 1 + lenBytes.length);
+  pkt.set(payloadBytes, 1 + lenBytes.length + topicBytes.length);
+  return pkt;
+}
+
+function mqttPublish(topic, obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN || transportMode !== 'serverless') return;
+  try {
+    ws.send(buildMqttPublishPacket(topic, obj));
+  } catch (e) {}
+}
+
+function connectServerlessRelay() {
+  transportMode = 'serverless';
+  mqttRxBuffer = new Uint8Array(0);
+  if (mqttPingInterval) clearInterval(mqttPingInterval);
+
+  try {
+    ws = new WebSocket('wss://broker.emqx.io:8084/mqtt', 'mqtt');
+    ws.binaryType = 'arraybuffer';
+  } catch (e) {
+    updateWsBadge('disconnected', 'OFFLINE');
+    return;
+  }
+
+  ws.onopen = () => {
+    ws.send(buildMqttConnectPacket('rps_' + myClientId));
+  };
+
+  ws.onmessage = (event) => {
+    const chunk = new Uint8Array(event.data);
+    const merged = new Uint8Array(mqttRxBuffer.length + chunk.length);
+    merged.set(mqttRxBuffer, 0);
+    merged.set(chunk, mqttRxBuffer.length);
+    mqttRxBuffer = merged;
+    parseMqttPackets();
+  };
+
+  ws.onclose = () => {
     updateWsBadge('disconnected', '🔴 OFFLINE');
   };
 
@@ -449,11 +604,535 @@ function ensureWebSocketConnected() {
   };
 }
 
-function wsSend(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(obj));
+function parseMqttPackets() {
+  while (mqttRxBuffer.length >= 2) {
+    const type = mqttRxBuffer[0] >> 4;
+    let multiplier = 1;
+    let remLen = 0;
+    let idx = 1;
+    let digit = 0;
+
+    do {
+      if (idx >= mqttRxBuffer.length) return;
+      digit = mqttRxBuffer[idx++];
+      remLen += (digit & 127) * multiplier;
+      multiplier *= 128;
+    } while ((digit & 128) !== 0);
+
+    const totalLen = idx + remLen;
+    if (mqttRxBuffer.length < totalLen) return;
+
+    const body = mqttRxBuffer.slice(idx, totalLen);
+    mqttRxBuffer = mqttRxBuffer.slice(totalLen);
+
+    if (type === 2) {
+      // CONNACK
+      updateWsBadge('connected', '🟢 ONLINE');
+      ws.send(buildMqttSubscribePacket(TOPIC_LOBBY, 1));
+      ws.send(buildMqttSubscribePacket(TOPIC_PEER_PREFIX + myClientId, 2));
+      mqttPublish(TOPIC_LOBBY, { kind: 'discover_rooms', fromId: myClientId });
+
+      if (mqttPingInterval) clearInterval(mqttPingInterval);
+      mqttPingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(new Uint8Array([0xc0, 0x00])); // PINGREQ
+        }
+      }, 25000);
+    } else if (type === 3) {
+      // PUBLISH
+      const topicLen = (body[0] << 8) | body[1];
+      const topic = new TextDecoder().decode(body.slice(2, 2 + topicLen));
+      const payloadStr = new TextDecoder().decode(body.slice(2 + topicLen));
+      try {
+        const data = JSON.parse(payloadStr);
+        handleServerlessPacket(topic, data);
+      } catch (e) {}
+    }
   }
 }
+
+function handleServerlessPacket(topic, data) {
+  if (topic === TOPIC_LOBBY) {
+    if (data.kind === 'discover_rooms') {
+      if (hostedRoom) announceHostedRoom();
+    } else if (data.kind === 'room_announce' && data.room) {
+      serverlessRooms.set(data.room.id, { ...data.room, updatedAt: Date.now() });
+      if (state.screen === 'lobby') {
+        renderLobbyRoomList(getServerlessRoomArray());
+      }
+    } else if (data.kind === 'room_remove' && data.roomId) {
+      serverlessRooms.delete(data.roomId);
+      if (state.screen === 'lobby') {
+        renderLobbyRoomList(getServerlessRoomArray());
+      }
+    }
+    return;
+  }
+
+  if (topic === TOPIC_PEER_PREFIX + myClientId) {
+    if (data.kind === 'server_msg') {
+      handleServerMessage(data.msg);
+    } else if (data.kind === 'peer_cmd' && hostedRoom) {
+      handleHostPeerCommand(data);
+    }
+  }
+}
+
+function getServerlessRoomArray() {
+  const now = Date.now();
+  const arr = [];
+  for (const [id, r] of serverlessRooms.entries()) {
+    if (now - r.updatedAt > 15000) {
+      serverlessRooms.delete(id);
+    } else {
+      arr.push(r);
+    }
+  }
+  return arr;
+}
+
+function sendToClientId(targetId, serverMsg) {
+  if (targetId === myClientId) {
+    handleServerMessage(serverMsg);
+  } else {
+    mqttPublish(TOPIC_PEER_PREFIX + targetId, { kind: 'server_msg', msg: serverMsg });
+  }
+}
+
+function announceHostedRoom() {
+  if (!hostedRoom) return;
+  mqttPublish(TOPIC_LOBBY, {
+    kind: 'room_announce',
+    room: {
+      id: hostedRoom.id,
+      title: hostedRoom.title,
+      hostId: myClientId,
+      hostName: hostedRoom.players[0] ? hostedRoom.players[0].nickname : state.nickname,
+      playerCount: hostedRoom.players.length,
+      maxPlayers: 2,
+      status: hostedRoom.status
+    }
+  });
+}
+
+function resetHostedRoomMatchState() {
+  if (!hostedRoom) return;
+  if (hostedRoom.chantTimer) clearTimeout(hostedRoom.chantTimer);
+  if (hostedRoom.nextRoundTimer) clearTimeout(hostedRoom.nextRoundTimer);
+  hostedRoom.round = 1;
+  hostedRoom.status = hostedRoom.players.length === 2 ? 'ready' : 'waiting';
+  hostedRoom.canSelect = false;
+  hostedRoom.playerStates = {};
+  for (const p of hostedRoom.players) {
+    hostedRoom.playerStates[p.id] = {
+      id: p.id,
+      nickname: p.nickname,
+      life: MAX_LIFE,
+      special: 0,
+      streak: 0,
+      cards: { scissors: INITIAL_CARD_COUNT, paper: INITIAL_CARD_COUNT, rock: INITIAL_CARD_COUNT },
+      selectedChoice: null
+    };
+  }
+}
+
+function broadcastHostedRoomUpdate() {
+  if (!hostedRoom) return;
+  for (const p of hostedRoom.players) {
+    const opp = hostedRoom.players.find((o) => o.id !== p.id) || null;
+    const myS = hostedRoom.playerStates[p.id];
+    const oppS = opp ? hostedRoom.playerStates[opp.id] : null;
+    sendToClientId(p.id, {
+      type: 'room_update',
+      room: {
+        id: hostedRoom.id,
+        title: hostedRoom.title,
+        status: hostedRoom.status,
+        round: hostedRoom.round,
+        hostId: hostedRoom.players[0] ? hostedRoom.players[0].id : null,
+        me: myS
+          ? {
+              id: myS.id,
+              nickname: myS.nickname,
+              life: myS.life,
+              special: myS.special,
+              streak: myS.streak,
+              cards: myS.cards
+            }
+          : null,
+        opp: oppS
+          ? {
+              id: oppS.id,
+              nickname: oppS.nickname,
+              life: oppS.life,
+              special: oppS.special,
+              streak: oppS.streak,
+              cards: oppS.cards,
+              totalCards: oppS.cards.scissors + oppS.cards.paper + oppS.cards.rock
+            }
+          : null
+      }
+    });
+  }
+  announceHostedRoom();
+}
+
+function startHostedRound() {
+  if (!hostedRoom || hostedRoom.players.length < 2) return;
+  if (hostedRoom.chantTimer) clearTimeout(hostedRoom.chantTimer);
+  if (hostedRoom.nextRoundTimer) clearTimeout(hostedRoom.nextRoundTimer);
+
+  hostedRoom.canSelect = true;
+  for (const p of hostedRoom.players) {
+    if (hostedRoom.playerStates[p.id]) {
+      hostedRoom.playerStates[p.id].selectedChoice = null;
+    }
+    sendToClientId(p.id, {
+      type: 'round_start',
+      round: hostedRoom.round,
+      chantTotalMs: CHANT_TOTAL_MS
+    });
+  }
+
+  hostedRoom.chantTimer = setTimeout(() => {
+    resolveHostedRound();
+  }, CHANT_TOTAL_MS);
+}
+
+function resolveHostedRound() {
+  if (!hostedRoom || hostedRoom.players.length < 2) return;
+  hostedRoom.canSelect = false;
+
+  const [p1, p2] = hostedRoom.players;
+  const s1 = hostedRoom.playerStates[p1.id];
+  const s2 = hostedRoom.playerStates[p2.id];
+  const c1 = s1.selectedChoice;
+  const c2 = s2.selectedChoice;
+
+  let p1Outcome = 'draw';
+  let p2Outcome = 'draw';
+  let p1Reason = '';
+  let p2Reason = '';
+  let isTimeoutRound = false;
+
+  if (!c1 && !c2) {
+    isTimeoutRound = true;
+    s1.life = Math.max(0, s1.life - 1);
+    s2.life = Math.max(0, s2.life - 1);
+    s1.special = Math.min(MAX_SPECIAL, s1.special + 1);
+    s2.special = Math.min(MAX_SPECIAL, s2.special + 1);
+    s1.streak = 0;
+    s2.streak = 0;
+    p1Outcome = 'timeout_both';
+    p2Outcome = 'timeout_both';
+  } else if (!c1 && c2) {
+    isTimeoutRound = true;
+    s1.life = Math.max(0, s1.life - 1);
+    s1.special = Math.min(MAX_SPECIAL, s1.special + 1);
+    s1.streak = 0;
+    p1Outcome = 'timeout_me';
+    p2Outcome = 'timeout_opp';
+  } else if (c1 && !c2) {
+    isTimeoutRound = true;
+    s2.life = Math.max(0, s2.life - 1);
+    s2.special = Math.min(MAX_SPECIAL, s2.special + 1);
+    s2.streak = 0;
+    p1Outcome = 'timeout_opp';
+    p2Outcome = 'timeout_me';
+  } else {
+    s1.cards[c1] -= 1;
+    s2.cards[c2] -= 1;
+    const res1 = judgeRound(c1, c2);
+    if (res1 === 'win') {
+      p1Outcome = 'win';
+      p2Outcome = 'lose';
+      s1.streak += 1;
+      s2.streak = 0;
+      let dmg = 1;
+      let tag = 'WIN';
+      if (s1.special >= MAX_SPECIAL) {
+        dmg = 3;
+        tag = '⚡SP!';
+        s1.special = 0;
+      } else if (s1.streak === 2) {
+        dmg = 2;
+        tag = '🔥2WIN';
+      } else if (s1.streak >= 3) {
+        dmg = 3;
+        tag = `🔥${s1.streak}WIN`;
+      }
+      s2.life = Math.max(0, s2.life - dmg);
+      s2.special = Math.min(MAX_SPECIAL, s2.special + 1);
+      p1Reason = tag;
+      p2Reason = tag;
+    } else if (res1 === 'lose') {
+      p1Outcome = 'lose';
+      p2Outcome = 'win';
+      s2.streak += 1;
+      s1.streak = 0;
+      let dmg = 1;
+      let tag = 'WIN';
+      if (s2.special >= MAX_SPECIAL) {
+        dmg = 3;
+        tag = '⚡SP!';
+        s2.special = 0;
+      } else if (s2.streak === 2) {
+        dmg = 2;
+        tag = '🔥2WIN';
+      } else if (s2.streak >= 3) {
+        dmg = 3;
+        tag = `🔥${s2.streak}WIN`;
+      }
+      s1.life = Math.max(0, s1.life - dmg);
+      s1.special = Math.min(MAX_SPECIAL, s1.special + 1);
+      p2Reason = tag;
+      p1Reason = tag;
+    } else {
+      s1.streak = 0;
+      s2.streak = 0;
+      s1.special = Math.min(MAX_SPECIAL, s1.special + 1);
+      s2.special = Math.min(MAX_SPECIAL, s2.special + 1);
+    }
+  }
+
+  const buildPayload = (meS, oppS, out, rsn, myC, oppC) => ({
+    type: 'round_result',
+    round: hostedRoom.round,
+    isTimeoutRound,
+    outcome: out,
+    reason: rsn,
+    myChoice: myC,
+    oppChoice: isTimeoutRound ? null : oppC,
+    me: { life: meS.life, special: meS.special, streak: meS.streak, cards: meS.cards },
+    opp: {
+      life: oppS.life,
+      special: oppS.special,
+      streak: oppS.streak,
+      cards: oppS.cards,
+      totalCards: oppS.cards.scissors + oppS.cards.paper + oppS.cards.rock
+    }
+  });
+
+  sendToClientId(p1.id, buildPayload(s1, s2, p1Outcome, p1Reason, c1, c2));
+  sendToClientId(p2.id, buildPayload(s2, s1, p2Outcome, p2Reason, c2, c1));
+
+  const p1Cards = s1.cards.scissors + s1.cards.paper + s1.cards.rock;
+  const p2Cards = s2.cards.scissors + s2.cards.paper + s2.cards.rock;
+  const anyZero = s1.life <= 0 || s2.life <= 0;
+  const allUsed = p1Cards === 0 && p2Cards === 0;
+
+  if (anyZero || allUsed) {
+    hostedRoom.status = 'ready';
+    announceHostedRoom();
+    setTimeout(() => {
+      if (!hostedRoom || hostedRoom.players.length < 2) return;
+      let f1 = 'draw', f2 = 'draw', m1 = '', m2 = '';
+      if (anyZero) {
+        if (s1.life > 0 && s2.life <= 0) {
+          f1 = 'win'; f2 = 'lose';
+          m1 = `상대방(${s2.nickname}) 생명 0! 승리!`;
+          m2 = '내 생명 게이지가 0이 되어 패배했습니다.';
+        } else if (s2.life > 0 && s1.life <= 0) {
+          f1 = 'lose'; f2 = 'win';
+          m1 = '내 생명 게이지가 0이 되어 패배했습니다.';
+          m2 = `상대방(${s1.nickname}) 생명 0! 승리!`;
+        } else {
+          m1 = m2 = '동시에 생명 게이지가 0이 되어 무승부!';
+        }
+      } else {
+        if (s1.life > s2.life) {
+          f1 = 'win'; f2 = 'lose';
+          m1 = `9장 모두 소진! 남은 생명(${s1.life} vs ${s2.life}) 우세 승리!`;
+          m2 = `9장 모두 소진! 남은 생명(${s2.life} vs ${s1.life}) 열세 패배.`;
+        } else if (s2.life > s1.life) {
+          f1 = 'lose'; f2 = 'win';
+          m1 = `9장 모두 소진! 남은 생명(${s1.life} vs ${s2.life}) 열세 패배.`;
+          m2 = `9장 모두 소진! 남은 생명(${s2.life} vs ${s1.life}) 우세 승리!`;
+        } else {
+          m1 = m2 = `9장 모두 소진! 남은 생명이 ${s1.life}칸으로 같아 무승부!`;
+        }
+      }
+      sendToClientId(p1.id, { type: 'match_over', finalResult: f1, reasonText: m1 });
+      sendToClientId(p2.id, { type: 'match_over', finalResult: f2, reasonText: m2 });
+    }, 900);
+    return;
+  }
+
+  hostedRoom.round += 1;
+  hostedRoom.nextRoundTimer = setTimeout(() => {
+    startHostedRound();
+  }, NEXT_ROUND_DELAY_MS);
+}
+
+function handleHostPeerCommand(data) {
+  if (!hostedRoom) return;
+  const fromId = data.fromId;
+
+  if (data.cmd === 'join_room') {
+    if (hostedRoom.players.length >= 2) {
+      sendToClientId(fromId, { type: 'error', message: '이미 인원이 가득 찬 방입니다.' });
+      return;
+    }
+    hostedRoom.players.push({ id: fromId, nickname: data.nickname || 'PLAYER' });
+    resetHostedRoomMatchState();
+    broadcastHostedRoomUpdate();
+  } else if (data.cmd === 'start_match') {
+    if (hostedRoom.players.length < 2 || hostedRoom.status === 'playing') return;
+    resetHostedRoomMatchState();
+    hostedRoom.status = 'playing';
+    announceHostedRoom();
+    startHostedRound();
+  } else if (data.cmd === 'select_card') {
+    if (hostedRoom.status !== 'playing' || !hostedRoom.canSelect) return;
+    const pS = hostedRoom.playerStates[fromId];
+    const choice = data.choice;
+    if (!pS || pS.selectedChoice || !CHOICE_META[choice] || pS.cards[choice] <= 0) return;
+    pS.selectedChoice = choice;
+    sendToClientId(fromId, { type: 'card_locked', choice });
+    const opp = hostedRoom.players.find((o) => o.id !== fromId);
+    if (opp) sendToClientId(opp.id, { type: 'opp_locked' });
+  } else if (data.cmd === 'play_again') {
+    if (hostedRoom.status !== 'playing') {
+      resetHostedRoomMatchState();
+      broadcastHostedRoomUpdate();
+    }
+    const opp = hostedRoom.players.find((o) => o.id !== fromId);
+    const sender = hostedRoom.players.find((o) => o.id === fromId);
+    if (opp && sender) {
+      sendToClientId(opp.id, { type: 'rematch_requested', nickname: sender.nickname });
+    }
+  } else if (data.cmd === 'leave_room') {
+    const wasPlaying = hostedRoom.status === 'playing';
+    hostedRoom.players = hostedRoom.players.filter((p) => p.id !== fromId);
+    resetHostedRoomMatchState();
+    broadcastHostedRoomUpdate();
+    if (wasPlaying) {
+      handleServerMessage({ type: 'opponent_left_during_match' });
+    }
+  }
+}
+
+function wsSend(obj) {
+  if (transportMode === 'server') {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+    return;
+  }
+
+  // Serverless 모드 처리
+  if (transportMode !== 'serverless') return;
+
+  switch (obj.type) {
+    case 'get_rooms':
+      mqttPublish(TOPIC_LOBBY, { kind: 'discover_rooms', fromId: myClientId });
+      renderLobbyRoomList(getServerlessRoomArray());
+      break;
+
+    case 'create_room': {
+      const roomId = 'room_' + myClientId;
+      hostedRoom = {
+        id: roomId,
+        title: obj.title || `${state.nickname}'s ROOM`,
+        players: [{ id: myClientId, nickname: state.nickname }],
+        status: 'waiting',
+        round: 1,
+        canSelect: false,
+        playerStates: {},
+        chantTimer: null,
+        nextRoundTimer: null
+      };
+      joinedHostId = myClientId;
+      resetHostedRoomMatchState();
+      broadcastHostedRoomUpdate();
+      if (hostAnnounceInterval) clearInterval(hostAnnounceInterval);
+      hostAnnounceInterval = setInterval(() => {
+        if (hostedRoom) announceHostedRoom();
+      }, 4000);
+      break;
+    }
+
+    case 'join_room': {
+      const targetRoom = serverlessRooms.get(obj.roomId);
+      const hostId = targetRoom ? targetRoom.hostId : obj.roomId.replace('room_', '');
+      joinedHostId = hostId;
+      mqttPublish(TOPIC_PEER_PREFIX + hostId, {
+        kind: 'peer_cmd',
+        cmd: 'join_room',
+        fromId: myClientId,
+        nickname: state.nickname
+      });
+      break;
+    }
+
+    case 'start_match':
+      if (hostedRoom) {
+        handleHostPeerCommand({ cmd: 'start_match', fromId: myClientId });
+      } else if (joinedHostId) {
+        mqttPublish(TOPIC_PEER_PREFIX + joinedHostId, {
+          kind: 'peer_cmd',
+          cmd: 'start_match',
+          fromId: myClientId
+        });
+      }
+      break;
+
+    case 'select_card':
+      if (hostedRoom) {
+        handleHostPeerCommand({ cmd: 'select_card', fromId: myClientId, choice: obj.choice });
+      } else if (joinedHostId) {
+        mqttPublish(TOPIC_PEER_PREFIX + joinedHostId, {
+          kind: 'peer_cmd',
+          cmd: 'select_card',
+          fromId: myClientId,
+          choice: obj.choice
+        });
+      }
+      break;
+
+    case 'play_again':
+      if (hostedRoom) {
+        handleHostPeerCommand({ cmd: 'play_again', fromId: myClientId });
+      } else if (joinedHostId) {
+        mqttPublish(TOPIC_PEER_PREFIX + joinedHostId, {
+          kind: 'peer_cmd',
+          cmd: 'play_again',
+          fromId: myClientId
+        });
+      }
+      break;
+
+    case 'leave_room':
+      if (hostedRoom) {
+        if (hostedRoom.chantTimer) clearTimeout(hostedRoom.chantTimer);
+        if (hostedRoom.nextRoundTimer) clearTimeout(hostedRoom.nextRoundTimer);
+        if (hostAnnounceInterval) clearInterval(hostAnnounceInterval);
+        const guest = hostedRoom.players.find((p) => p.id !== myClientId);
+        if (guest) {
+          sendToClientId(guest.id, { type: 'opponent_left_during_match' });
+          sendToClientId(guest.id, { type: 'left_room', rooms: [] });
+        }
+        mqttPublish(TOPIC_LOBBY, { kind: 'room_remove', roomId: hostedRoom.id });
+        serverlessRooms.delete(hostedRoom.id);
+        hostedRoom = null;
+        joinedHostId = null;
+      } else if (joinedHostId) {
+        mqttPublish(TOPIC_PEER_PREFIX + joinedHostId, {
+          kind: 'peer_cmd',
+          cmd: 'leave_room',
+          fromId: myClientId
+        });
+        joinedHostId = null;
+      }
+      break;
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (hostedRoom || joinedHostId) {
+    wsSend({ type: 'leave_room' });
+  }
+});
 
 function updateWsBadge(statusClass, text) {
   const badge = document.getElementById('ws-status-badge');
