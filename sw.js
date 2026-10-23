@@ -1,16 +1,16 @@
 // Service Worker for PWA Desktop & Android Home Screen Installation
-const CACHE_NAME = 'battle-rps-v4';
+const CACHE_NAME = 'battle-rps-v5';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/voices.js',
-  '/game.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/icon.svg',
-  '/favicon.ico'
+  './',
+  './index.html',
+  './style.css',
+  './voices.js',
+  './game.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './icon.svg',
+  './favicon.ico'
 ];
 
 self.addEventListener('install', (event) => {

@@ -2207,9 +2207,9 @@ function isRunningStandalone() {
 }
 
 async function initPwaAndShortcutPrompt() {
-  // 1) Service Worker 등록
+  // 1) Service Worker 등록 (상대 경로를 사용하여 GitHub Pages 하위 폴더 호스팅도 완벽 지원)
   if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 
   const installModal = document.getElementById('install-modal');
@@ -2346,8 +2346,9 @@ function openInstallModal() {
 }
 
 function downloadWindowsShortcutFile() {
-  const targetUrl = window.location.origin || 'http://localhost:3000';
-  const iconUrl = `${targetUrl}/favicon.ico`;
+  const baseHref = window.location.href.split('#')[0].split('?')[0].replace(/\/index\.html$/i, '');
+  const targetUrl = baseHref.endsWith('/') ? baseHref : `${baseHref}/`;
+  const iconUrl = `${targetUrl}favicon.ico`;
   const content = `[InternetShortcut]\r\nURL=${targetUrl}\r\nIconFile=${iconUrl}\r\nIconIndex=0\r\n`;
   const blob = new Blob([content], { type: 'application/internet-shortcut' });
   const a = document.createElement('a');
