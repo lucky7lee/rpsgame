@@ -2187,6 +2187,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // 게임 설명(GAME RULES) 모달 열기/닫기
+  const rulesModal = document.getElementById('rules-modal');
+  const btnOpenRules = document.getElementById('btn-open-rules');
+  const btnCloseRules = document.getElementById('btn-close-rules');
+
+  if (btnOpenRules && rulesModal) {
+    btnOpenRules.addEventListener('click', () => {
+      rulesModal.classList.remove('hidden');
+    });
+  }
+
+  if (btnCloseRules && rulesModal) {
+    btnCloseRules.addEventListener('click', () => {
+      rulesModal.classList.add('hidden');
+    });
+  }
+
+  if (rulesModal) {
+    rulesModal.addEventListener('click', (e) => {
+      if (e.target === rulesModal) {
+        rulesModal.classList.add('hidden');
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !rulesModal.classList.contains('hidden')) {
+        rulesModal.classList.add('hidden');
+      }
+    });
+  }
+
   initPwaAndShortcutPrompt();
 });
 

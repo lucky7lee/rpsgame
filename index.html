@@ -56,16 +56,13 @@
           </div>
         </div>
 
-        <!-- 시작 화면 하단: 별도 게임 설명 영역 -->
-        <div class="menu-rules-box">
-          <h3 class="menu-rules-title">📖 GAME RULES (게임 설명)</h3>
-          <ul class="menu-rules-list">
-            <li>🃏 <strong>카드 (총 9장)</strong> : 가위(3장), 바위(3장), 보(3장) 중 한 판당 1장씩 사용하며 쓴 카드는 사라집니다.</li>
-            <li>⏱️ <strong>선택 시간</strong> : 하단의 <strong>START</strong>를 누르면 <em>"가위, 바위, 보!"</em>가 끝날 때까지 카드를 선택해야 합니다. (미선택 시 내 생명 -1 &amp; 필살기 +1, 다음 판은 5초 후 자동 시작)</li>
-            <li>⭐ <strong>생명 게이지 (5칸)</strong> : 패배 시 -1칸 | <strong>2연승</strong> 시 -2칸 | <strong>3연승 이상</strong> 시 무조건 -3칸</li>
-            <li>🔥 <strong>필살기 게이지 (3칸)</strong> : 지거나 비길 때마다(미선택 포함) +1칸 | <strong>3칸 완충 후 승리 시</strong> 상대 생명 -3칸 &amp; 게이지 0 초기화</li>
-            <li>🏆 <strong>승패 판정</strong> : 생명 게이지가 0이 되면 즉시 종료! 9장을 모두 써도 0이 된 사람이 없으면 남은 생명이 많은 쪽이 승리(같으면 무승부)합니다.</li>
-          </ul>
+        <!-- 메인 화면 싱글/멀티 아래: 게임 설명 메뉴 버튼 -->
+        <div class="menu-rules-trigger-wrap">
+          <button id="btn-open-rules" class="btn-rules-trigger" type="button" aria-haspopup="dialog">
+            <span class="btn-rules-icon">📖</span>
+            <span class="btn-rules-text">GAME RULES (게임 설명)</span>
+            <span class="btn-rules-chip">VIEW</span>
+          </button>
         </div>
       </div>
     </section>
@@ -332,6 +329,63 @@
         </button>
         <button id="btn-install-later" class="btn-secondary-large" type="button">
           나중에
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 게임 설명 모달 (RULES MODAL) -->
+  <div id="rules-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="rules-modal-title">
+    <div class="modal-card rules-modal-card">
+      <div class="rules-modal-header">
+        <div class="modal-badge rules-badge">HOW TO PLAY</div>
+        <h2 id="rules-modal-title" class="modal-title rules-modal-title">📖 GAME RULES</h2>
+        <p class="rules-modal-subtitle">배틀 가위바위보 규칙 및 승리 팁</p>
+      </div>
+
+      <div class="rules-modal-scroll">
+        <ul class="rules-modal-list">
+          <li class="rule-card-item">
+            <span class="rule-icon">🃏</span>
+            <div class="rule-text-wrap">
+              <strong class="rule-title">카드 (총 9장 제한)</strong>
+              <p class="rule-desc">가위(3장), 바위(3장), 보(3장) 중 한 판당 1장씩 선택하며, <strong>사용한 카드는 소멸</strong>됩니다.</p>
+            </div>
+          </li>
+          <li class="rule-card-item">
+            <span class="rule-icon">⏱️</span>
+            <div class="rule-text-wrap">
+              <strong class="rule-title">선택 시간 &amp; 자동 진행</strong>
+              <p class="rule-desc">하단의 <strong>START</strong> 버튼을 누르면 <em>"가위, 바위, 보!"</em> 구호 동안 카드를 내야 합니다. (미선택 시 내 생명 -1 &amp; 필살기 +1, 5초 후 다음 라운드 자동 시작)</p>
+            </div>
+          </li>
+          <li class="rule-card-item">
+            <span class="rule-icon">⭐</span>
+            <div class="rule-text-wrap">
+              <strong class="rule-title">생명 게이지 (5칸)</strong>
+              <p class="rule-desc">기본 패배 시 -1칸 | <strong>2연승</strong> 시 -2칸 | <strong>3연승 이상</strong> 시 무조건 <strong>-3칸 타격</strong>!</p>
+            </div>
+          </li>
+          <li class="rule-card-item">
+            <span class="rule-icon">🔥</span>
+            <div class="rule-text-wrap">
+              <strong class="rule-title">필살기 게이지 (3칸)</strong>
+              <p class="rule-desc">패배/무승부/미선택 시마다 +1칸 충전! <strong>3칸 완충 후 승리 시</strong> 상대 생명 -3칸 타격 &amp; 0으로 초기화됩니다.</p>
+            </div>
+          </li>
+          <li class="rule-card-item">
+            <span class="rule-icon">🏆</span>
+            <div class="rule-text-wrap">
+              <strong class="rule-title">승패 판정</strong>
+              <p class="rule-desc">어느 한쪽의 생명이 0이 되면 즉시 게임 종료! 9장을 모두 소진하면 <strong>남은 생명이 많은 쪽이 승리</strong>(동점 시 무승부)합니다.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="modal-btn-row">
+        <button id="btn-close-rules" class="btn-primary-large" type="button">
+          ✅ 확인 (닫기)
         </button>
       </div>
     </div>
