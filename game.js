@@ -2,6 +2,22 @@
 // BATTLE RPS - Single & Online Multi (game.js)
 // ==========================================
 
+// 서비스 워커 및 캐시 완전 삭제 (구버전 캐시 즉시 제거)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const r of registrations) {
+      r.unregister();
+    }
+  });
+}
+if ('caches' in window) {
+  caches.keys().then((keys) => {
+    for (const k of keys) {
+      caches.delete(k);
+    }
+  });
+}
+
 const HAND_SVGS = {
   scissors: `
     <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
