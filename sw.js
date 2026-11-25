@@ -1,5 +1,5 @@
 // Service Worker for PWA Desktop & Android Home Screen Installation
-const CACHE_NAME = 'battle-rps-v6';
+const CACHE_NAME = 'battle-rps-v7';
 const ASSETS = [
   './',
   './index.html',
